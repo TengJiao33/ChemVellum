@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ChemVellum Dashboard</title>
+  <style>
+    :root {
+      --ink: #17211b;
+      --muted: #66736d;
+      --panel: #fffaf0;
+      --line: #d9cdb8;
+      --accent: #1c6b5a;
+      --orange: #c96d34;
+      --red: #a83b35;
+      --blue: #355f8a;
+      --shadow: 0 18px 48px rgba(44, 35, 19, .13);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 5%, rgba(201,109,52,.15), transparent 28rem),
+        radial-gradient(circle at 80% 15%, rgba(28,107,90,.16), transparent 24rem),
+        linear-gradient(135deg, #f4ecd9 0%, #faf6eb 44%, #efe4cf 100%);
+      font-family: Georgia, "Times New Roman", serif;
+      overflow: hidden;
+    }
+    button, input, textarea, select { font: inherit; }
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 340px minmax(420px, 1fr) 460px;
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      background: rgba(255,250,240,.93);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .head { padding: 15px; border-bottom: 1px solid var(--line); }
+    h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
+    h1 { font-size: 23px; }
+    h2 { font-size: 18px; }
+    .sub { margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.35; }
+    .modebar, .toolbar, .tabs {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .mode, .tab, .btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #fffdf7;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .mode.active, .tab.active, .btn.primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    .btn.orange { background: var(--orange); color: white; border-color: var(--orange); }
+    .btn.red { background: var(--red); color: white; border-color: var(--red); }
+    input, select {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: #fffdf7;
+      outline: none;
+      min-width: 0;
+    }
+    .list { overflow: auto; padding: 8px; }
+    .card {
+      width: 100%;
+      text-align: left;
+      background: #fffdf7;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      padding: 11px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .card:hover, .card.active { border-color: var(--accent); background: #f4fbf2; }
+    .card.deleted { opacity: .45; background: #f5eadf; }
+    .id { font-size: 12px; color: var(--accent); font-weight: 700; letter-spacing: .04em; }
+    .title { margin-top: 5px; font-size: 14px; line-height: 1.24; font-weight: 700; }
+    .meta { margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .pill {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      margin: 7px 4px 0 0;
+      background: #e6efe3;
+      color: #285a37;
+    }
+    .pill.web { background: #e4ebf4; color: #254c74; }
+    .pill.warn { background: #f6dfd3; color: #873e1e; }
+    .main { min-height: 0; overflow: auto; padding: 12px; }
+    .result {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fffdf7;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .result.drop { opacity: .42; }
+    .actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+    .detail-body { flex: 1; min-height: 0; overflow: auto; background: #fffdf7; }
+    iframe { border: 0; width: 100%; height: 100%; background: white; }
+    .markdown, .summary {
+      height: 100%;
+      overflow: auto;
+      padding: 22px;
+      line-height: 1.55;
+      font-size: 15px;
+    }
+    pre {
+      margin: 0;
+      padding: 14px;
+      white-space: pre-wrap;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    textarea {
+      width: 100%;
+      min-height: 260px;
+      resize: vertical;
+      border: 0;
+      outline: none;
+      padding: 14px;
+      background: #181d1a;
+      color: #e8f4ea;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .message {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      padding: 11px 15px;
+      border-radius: 12px;
+      background: #15251f;
+      color: white;
+      box-shadow: var(--shadow);
+      display: none;
+      max-width: 460px;
+    }
+    .message.show { display: block; }
+    @media (max-width: 1180px) {
+      body { overflow: auto; }
+      .app { height: auto; grid-template-columns: 1fr; }
+      .panel { min-height: 460px; }
+    }
+  </style>
+</head>
+<body>
+<main class="app">
+  <aside class="panel">
+    <div class="head">
+      <h1>ChemVellum</h1>
+      <div id="leftSub" class="sub">Unified library and discovery dashboard</div>
+    </div>
+    <div class="modebar">
+      <button class="mode active" data-mode="library">Library Audit</button>
+      <button class="mode" data-mode="discovery">Topic Discovery</button>
+    </div>
+    <div class="toolbar" id="leftToolbar"></div>
+    <div id="leftList" class="list"></div>
+  </aside>
+
+  <section class="panel">
+    <div class="head">
+      <h2 id="centerTitle">Library Papers</h2>
+      <div id="centerSub" class="sub"></div>
+    </div>
+    <div class="toolbar" id="centerToolbar"></div>
+    <div id="centerMain" class="main"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head">
+      <h2 id="detailTitle">Detail</h2>
+      <div id="detailSub" class="sub"></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="summary">Summary</button>
+      <button class="tab" data-tab="pdf">PDF</button>
+      <button class="tab" data-tab="markdown">Markdown</button>
+      <button class="tab" data-tab="metadata">Metadata</button>
+      <button class="tab" data-tab="json">Edit JSON</button>
+    </div>
+    <div class="detail-body">
+      <div id="summaryPane" class="summary"></div>
+      <iframe id="pdfPane" style="display:none"></iframe>
+      <div id="markdownPane" class="markdown" style="display:none"></div>
+      <pre id="metadataPane" style="display:none"></pre>
+      <div id="jsonPane" style="display:none"><textarea id="jsonEditor" spellcheck="false"></textarea></div>
+    </div>
+  </section>
+</main>
+<div id="message" class="message"></div>
+
+<script>
+let mode = 'library';
+let papers = [];
+let discoveryProjects = [];
+let selectedPaper = null;
+let currentMeta = null;
+let currentProject = null;
+let discovery = null;
+let selectedKeyword = null;
+let selectedDiscoveryPaper = null;
+
+const $ = id => document.getElementById(id);
+const els = {
+  leftSub: $('leftSub'), leftToolbar: $('leftToolbar'), leftList: $('leftList'),
+  centerTitle: $('centerTitle'), centerSub: $('centerSub'), centerToolbar: $('centerToolbar'), centerMain: $('centerMain'),
+  detailTitle: $('detailTitle'), detailSub: $('detailSub'), summaryPane: $('summaryPane'), pdfPane: $('pdfPane'),
+  markdownPane: $('markdownPane'), metadataPane: $('metadataPane'), jsonPane: $('jsonPane'), jsonEditor: $('jsonEditor'), message: $('message')
+};
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+function msg(s) { els.message.textContent = s; els.message.classList.add('show'); setTimeout(() => els.message.classList.remove('show'), 2600); }
+function field(meta, key, fallback='') { const v = meta?.[key]; return v && typeof v === 'object' && 'value' in v ? (v.value ?? fallback) : (v ?? fallback); }
+function renderMarkdown(md) {
+  let html = esc(md);
+  html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>').replace(/^## (.*)$/gm, '<h2>$1</h2>').replace(/^# (.*)$/gm, '<h1>$1</h1>');
+  html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" style="max-width:100%" src="/file?paper_id=' + encodeURIComponent(selectedPaper || '') + '&path=$2">');
+  return html.split(/\n{2,}/).map(b => /^<h[123]|^<img/.test(b) ? b : '<p>' + b.replace(/\n/g, '<br>') + '</p>').join('\n');
+}
+function setTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+  for (const id of ['summaryPane','pdfPane','markdownPane','metadataPane','jsonPane']) $(id).style.display = 'none';
+  const map = {summary:'summaryPane', pdf:'pdfPane', markdown:'markdownPane', metadata:'metadataPane', json:'jsonPane'};
+  $(map[name]).style.display = 'block';
+}
+
+async function init() {
+  await Promise.all([loadPapers(), loadDiscoveryProjects()]);
+  render();
+}
+async function loadPapers() { papers = await (await fetch('/api/papers')).json(); }
+async function loadDiscoveryProjects() { discoveryProjects = await (await fetch('/api/discovery-projects')).json(); }
+
+function render() {
+  document.querySelectorAll('.mode').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  if (mode === 'library') renderLibrary();
+  else renderDiscoveryShell();
+}
+
+function renderLibrary() {
+  els.leftSub.textContent = 'Paper metadata, PDF, Markdown, tags';
+  els.leftToolbar.innerHTML = '<input id="paperFilter" placeholder="Search papers"><button class="btn" id="reloadPapers">Reload</button>';
+  els.centerTitle.textContent = 'Library Papers';
+  els.centerSub.textContent = `${papers.length} papers`;
+  els.centerToolbar.innerHTML = '<button class="btn primary" id="saveMeta">Save Metadata</button><button class="btn orange" id="markReviewed">Mark Reviewed</button>';
+  renderPaperList();
+  els.centerMain.innerHTML = '<p>Select a paper from the left.</p>';
+  attachLibraryEvents();
+}
+function renderPaperList(filter='') {
+  const q = filter.toLowerCase();
+  const rows = papers.filter(p => [p.paper_id,p.title,p.year,p.journal,...(p.authors||[]),...(p.keywords||[]),...(p.tags||[])].join(' ').toLowerCase().includes(q));
+  els.leftList.innerHTML = rows.map(p => `<button class="card ${selectedPaper===p.paper_id?'active':''}" data-paper="${esc(p.paper_id)}">
+    <div class="id">${esc(p.paper_id)}</div><div class="title">${esc(p.title || '(untitled)')}</div>
+    <div class="meta">${esc([p.year,p.journal].filter(Boolean).join(' · '))}</div>
+    <span class="pill ${p.needs_human_check?'warn':''}">${esc(p.human_review_status || 'not_reviewed')}</span>
+  </button>`).join('');
+}
+function attachLibraryEvents() {
+  $('paperFilter')?.addEventListener('input', e => renderPaperList(e.target.value));
+  $('reloadPapers')?.addEventListener('click', async () => { await loadPapers(); renderLibrary(); });
+  $('saveMeta')?.addEventListener('click', saveMetadata);
+  $('markReviewed')?.addEventListener('click', markReviewed);
+}
+async function selectPaper(pid) {
+  selectedPaper = pid;
+  currentMeta = await (await fetch(`/api/metadata/${encodeURIComponent(pid)}`)).json();
+  els.detailTitle.textContent = field(currentMeta, 'title');
+  els.detailSub.textContent = `${pid} · ${field(currentMeta, 'year', '')} · ${field(currentMeta, 'journal', '')}`;
+  const tags = [...(field(currentMeta,'keywords',[])||[]), ...(field(currentMeta,'llm_tags',[])||[]), ...(currentMeta.human_tags||[])];
+  els.summaryPane.innerHTML = `<h3>${esc(field(currentMeta,'title'))}</h3><p>${esc(field(currentMeta,'abstract'))}</p><p>${tags.map(t=>`<span class="pill">${esc(t)}</span>`).join('')}</p>`;
+  els.metadataPane.textContent = JSON.stringify(currentMeta, null, 2);
+  els.jsonEditor.value = JSON.stringify(currentMeta, null, 2);
+  els.pdfPane.src = currentMeta.source_paths?.pdf ? `/file?path=${encodeURIComponent(currentMeta.source_paths.pdf)}` : 'about:blank';
+  const md = await (await fetch(`/api/markdown/${encodeURIComponent(pid)}`)).text();
+  els.markdownPane.innerHTML = renderMarkdown(md);
+  renderPaperList($('paperFilter')?.value || '');
+  setTab('summary');
+}
+async function saveMetadata() {
+  if (!selectedPaper) return;
+  let parsed;
+  try { parsed = JSON.parse(els.jsonEditor.value); } catch (e) { msg(e.message); return; }
+  const res = await fetch(`/api/metadata/${encodeURIComponent(selectedPaper)}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(parsed)});
+  if (!res.ok) { msg(await res.text()); return; }
+  msg('Metadata saved'); await loadPapers(); await selectPaper(selectedPaper);
+}
+async function markReviewed() {
+  if (!selectedPaper) return;
+  const meta = JSON.parse(els.jsonEditor.value);
+  meta.human_review = meta.human_review || {};
+  meta.human_review.status = 'reviewed';
+  meta.human_review.reviewed_at = new Date().toISOString();
+  meta.human_review.reviewer = meta.human_review.reviewer || 'human';
+  els.jsonEditor.value = JSON.stringify(meta, null, 2);
+  await saveMetadata();
+}
+
+function renderDiscoveryShell() {
+  els.leftSub.textContent = 'Keyword-by-keyword paper discovery';
+  els.leftToolbar.innerHTML = `<select id="projectSelect">${discoveryProjects.map(p=>`<option value="${esc(p.project_id)}">${esc(p.project_id)}</option>`).join('')}</select><button class="btn" id="reloadDiscovery">Reload</button>`;
+  els.centerTitle.textContent = 'Keyword Results';
+  els.centerSub.textContent = currentProject || 'Select a discovery project';
+  els.centerToolbar.innerHTML = '<button class="btn primary" id="saveDiscovery">Save</button><button class="btn orange" id="confirmDiscovery">Confirm Discovery</button><button class="btn" id="toggleKeyword">Toggle Keyword</button>';
+  attachDiscoveryShellEvents();
+  if (!currentProject && discoveryProjects.length) currentProject = discoveryProjects[0].project_id;
+  if (currentProject) loadDiscovery(currentProject); else els.leftList.innerHTML = '<p>No discovery projects found.</p>';
+}
+function attachDiscoveryShellEvents() {
+  $('projectSelect')?.addEventListener('change', e => { currentProject = e.target.value; loadDiscovery(currentProject); });
+  $('reloadDiscovery')?.addEventListener('click', async () => { await loadDiscoveryProjects(); if (currentProject) await loadDiscovery(currentProject); });
+  $('saveDiscovery')?.addEventListener('click', () => saveDiscovery(false));
+  $('confirmDiscovery')?.addEventListener('click', () => saveDiscovery(true));
+  $('toggleKeyword')?.addEventListener('click', () => { const g = currentGroup(); if (g) { g.keep = g.keep === false; renderDiscovery(); } });
+}
+async function loadDiscovery(projectId) {
+  discovery = await (await fetch(`/api/discovery/${encodeURIComponent(projectId)}`)).json();
+  selectedKeyword = discovery.results.find(g => g.keep !== false)?.keyword || discovery.results[0]?.keyword;
+  selectedDiscoveryPaper = null;
+  renderDiscovery();
+}
+function renderDiscovery() {
+  if (!discovery) return;
+  els.centerSub.textContent = `${currentProject} · ${discovery.topic || ''}`;
+  els.leftList.innerHTML = discovery.results.map(g => `<button class="card ${selectedKeyword===g.keyword?'active':''} ${g.keep===false?'deleted':''}" data-keyword="${esc(g.keyword)}">
+    <div class="title">${esc(g.keyword)}</div><div class="meta">${esc(g.category || '')}</div>
+    <span class="pill">${(g.local_results||[]).filter(r=>r.keep!==false).length} local</span><span class="pill web">${(g.web_results||[]).filter(r=>r.keep!==false).length} web</span>
+  </button>`).join('');
+  renderDiscoveryResults();
+}
+function currentGroup() { return discovery?.results?.find(g => g.keyword === selectedKeyword); }
+function renderDiscoveryResults() {
+  const g = currentGroup();
+  if (!g) { els.centerMain.innerHTML = ''; return; }
+  const rows = [...(g.local_results||[]).map(r=>({...r,kind:'local'})), ...(g.web_results||[]).map((r,i)=>({...r,kind:'web',webIndex:i}))];
+  els.centerMain.innerHTML = `<h3>${esc(g.keyword)}</h3><p class="meta">keep=${g.keep !== false}</p>` + rows.map(r => {
+    const id = r.kind === 'local' ? r.paper_id : `web-${r.webIndex}`;
+    return `<div class="result ${r.keep===false?'drop':''}">
+      <div class="title">${esc(r.title || '(untitled)')}</div>
+      <div class="meta">${esc([r.paper_id,r.year,r.journal,`score=${r.score}`].filter(Boolean).join(' · '))}</div>
+      <div class="meta">${esc(r.reason || '')} ${r.url ? `<a href="${esc(r.url)}" target="_blank">Open link</a>` : ''}</div>
+      <div class="actions">
+        <button class="btn ${r.keep===false?'primary':'red'}" data-disc-action="toggle" data-kind="${r.kind}" data-id="${esc(id)}">${r.keep===false?'Restore':'Delete'}</button>
+        ${r.kind==='local' ? `<select data-disc-role="${esc(id)}">${['core_candidate','supporting_candidate','background','uncertain','excluded'].map(x=>`<option ${r.role===x?'selected':''}>${x}</option>`).join('')}</select>` : ''}
+        <button class="btn" data-disc-action="view" data-kind="${r.kind}" data-id="${esc(id)}">View</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function findDiscoveryRow(kind, id) {
+  const g = currentGroup();
+  if (kind === 'local') return (g.local_results || []).find(r => r.paper_id === id);
+  return (g.web_results || [])[Number(id.replace('web-', ''))];
+}
+async function viewDiscoveryPaper(kind, id) {
+  const row = findDiscoveryRow(kind, id);
+  selectedDiscoveryPaper = {kind, id, row};
+  els.detailTitle.textContent = row.title || '(untitled)';
+  els.detailSub.textContent = kind === 'local' ? `${row.paper_id} · ${row.year || ''} · ${row.journal || ''}` : `${row.year || ''} · ${row.journal || ''}`;
+  els.summaryPane.innerHTML = `<h3>${esc(row.title)}</h3><p><strong>Score:</strong> ${esc(row.score)}</p><p>${esc(row.reason || '')}</p>${row.url?`<p><a href="${esc(row.url)}" target="_blank">Open web result</a></p>`:''}`;
+  if (kind === 'local') {
+    selectedPaper = row.paper_id;
+    const meta = await (await fetch(`/api/local/metadata/${encodeURIComponent(row.paper_id)}`)).json();
+    currentMeta = meta;
+    els.metadataPane.textContent = JSON.stringify(meta, null, 2);
+    els.jsonEditor.value = JSON.stringify(meta, null, 2);
+    els.pdfPane.src = meta.source_paths?.pdf ? `/file?path=${encodeURIComponent(meta.source_paths.pdf)}` : 'about:blank';
+    const md = await (await fetch(`/api/local/markdown/${encodeURIComponent(row.paper_id)}`)).text();
+    els.markdownPane.innerHTML = renderMarkdown(md);
+  } else {
+    els.metadataPane.textContent = JSON.stringify(row, null, 2);
+    els.jsonEditor.value = JSON.stringify(row, null, 2);
+    els.markdownPane.textContent = 'No local Markdown for web result.';
+    els.pdfPane.src = 'about:blank';
+  }
+  setTab('summary');
+}
+async function saveDiscovery(confirm=false) {
+  if (!currentProject || !discovery) return;
+  const res = await fetch(`/api/discovery/${encodeURIComponent(currentProject)}${confirm?'?confirm=1':''}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(discovery)});
+  if (!res.ok) { msg(await res.text()); return; }
+  msg(confirm ? 'Discovery confirmed' : 'Discovery saved');
+  await loadDiscoveryProjects(); await loadDiscovery(currentProject);
+}
+
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => { mode = b.dataset.mode; render(); }));
+document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+els.leftList.addEventListener('click', async e => {
+  const paper = e.target.closest('[data-paper]');
+  if (paper) await selectPaper(paper.dataset.paper);
+  const kw = e.target.closest('[data-keyword]');
+  if (kw) { selectedKeyword = kw.dataset.keyword; selectedDiscoveryPaper = null; renderDiscovery(); }
+});
+els.centerMain.addEventListener('click', async e => {
+  const btn = e.target.closest('[data-disc-action]');
+  if (!btn) return;
+  const row = findDiscoveryRow(btn.dataset.kind, btn.dataset.id);
+  if (btn.dataset.discAction === 'toggle') { row.keep = row.keep === false; renderDiscoveryResults(); }
+  if (btn.dataset.discAction === 'view') await viewDiscoveryPaper(btn.dataset.kind, btn.dataset.id);
+});
+els.centerMain.addEventListener('change', e => {
+  const sel = e.target.closest('[data-disc-role]');
+  if (!sel) return;
+  const row = findDiscoveryRow('local', sel.dataset.discRole);
+  if (row) row.role = sel.value;
+});
+
+init().catch(err => msg(err.message));
+</script>
+</body>
+</html>

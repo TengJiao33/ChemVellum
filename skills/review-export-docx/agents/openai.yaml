@@ -1,0 +1,6 @@
+interface:
+  display_name: "Review Export DOCX"
+  short_description: "Export DOCX, render PDF, and inspect real pages."
+  default_prompt: "Use $review-export-docx to convert the current review Markdown to DOCX, render that DOCX to PDF immediately, and inspect every rendered page."
+policy:
+  allow_implicit_invocation: true

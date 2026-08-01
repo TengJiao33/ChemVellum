@@ -1,0 +1,374 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review Library Audit</title>
+  <style>
+    :root {
+      --ink: #17211b;
+      --muted: #66736d;
+      --panel: #fffaf0;
+      --line: #d9cdb8;
+      --accent: #1c6b5a;
+      --accent-2: #c96d34;
+      --shadow: 0 18px 48px rgba(44, 35, 19, .13);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 5%, rgba(201,109,52,.15), transparent 28rem),
+        radial-gradient(circle at 80% 15%, rgba(28,107,90,.16), transparent 24rem),
+        linear-gradient(135deg, #f4ecd9 0%, #faf6eb 44%, #efe4cf 100%);
+      font-family: Georgia, "Times New Roman", serif;
+      overflow: hidden;
+    }
+    button, input, textarea { font: inherit; }
+    .nav {
+      height: 54px;
+      padding: 9px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,250,240,.92);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-title { font-weight: 700; font-size: 18px; }
+    .nav a {
+      display: inline-block;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      margin-left: 8px;
+      background: #fffdf7;
+    }
+    .nav a.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+    .app {
+      height: calc(100vh - 54px);
+      display: grid;
+      grid-template-columns: 330px minmax(460px, 1fr) 430px;
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      background: rgba(255,250,240,.92);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 0;
+    }
+    .sidebar, .viewer, .metadata {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .brand, .meta-head {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    .brand h1, .meta-head h2 { margin: 0; letter-spacing: -.02em; }
+    .brand p {
+      margin: 7px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+    .search, .tabs {
+      padding: 10px;
+      display: flex;
+      gap: 8px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,250,240,.78);
+    }
+    .search input {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 10px 13px;
+      background: #fffdf7;
+      outline: none;
+    }
+    .papers { overflow: auto; padding: 8px; }
+    .paper-card {
+      width: 100%;
+      text-align: left;
+      background: #fffdf7;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      padding: 11px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .paper-card:hover, .paper-card.active { border-color: var(--accent); background: #f4fbf2; }
+    .paper-id { font-size: 12px; color: var(--accent); font-weight: 700; letter-spacing: .04em; }
+    .paper-title { margin-top: 5px; font-size: 14px; line-height: 1.24; }
+    .paper-meta { margin-top: 7px; color: var(--muted); font-size: 12px; }
+    .status {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      margin-top: 8px;
+      background: #f1e4cd;
+      color: #654d2c;
+    }
+    .status.reviewed { background: #ddefd7; color: #245b28; }
+    .status.warn { background: #f6dfd3; color: #873e1e; }
+    .tab, .btn {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #fffdf7;
+      color: var(--muted);
+      cursor: pointer;
+    }
+    .tab.active, .btn.primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+    .btn.orange { background: var(--accent-2); color: white; border-color: var(--accent-2); }
+    .viewer-body { flex: 1; min-height: 0; position: relative; }
+    iframe { border: 0; width: 100%; height: 100%; background: white; }
+    .markdown {
+      height: 100%;
+      overflow: auto;
+      padding: 28px 34px;
+      background: #fffdf7;
+      line-height: 1.58;
+      font-size: 16px;
+    }
+    .markdown img { max-width: 100%; border: 1px solid var(--line); border-radius: 10px; }
+    .meta-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .meta-summary {
+      padding: 15px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255,253,247,.8);
+      max-height: 38%;
+      overflow: auto;
+    }
+    .field { margin-bottom: 12px; }
+    .label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 3px;
+    }
+    .value { font-size: 14px; line-height: 1.35; }
+    .tag {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: #e7efe3;
+      color: #285a3b;
+      margin: 2px 4px 2px 0;
+      font-size: 12px;
+    }
+    .editor-wrap {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .editor-label {
+      padding: 9px 14px;
+      font-size: 12px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+    }
+    textarea {
+      flex: 1;
+      width: 100%;
+      resize: none;
+      border: 0;
+      outline: none;
+      padding: 14px;
+      background: #181d1a;
+      color: #e8f4ea;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .message {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      padding: 11px 15px;
+      border-radius: 12px;
+      background: #15251f;
+      color: white;
+      box-shadow: var(--shadow);
+      display: none;
+      max-width: 420px;
+    }
+    .message.show { display: block; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-title">ChemVellum Dashboard</div>
+    <div>
+      <a class="active" href="/library">Library Audit</a>
+      <a href="/discovery">Topic Discovery</a>
+    </div>
+  </nav>
+  <main class="app">
+    <aside class="panel sidebar">
+      <div class="brand">
+        <h1>Paper Audit Desk</h1>
+        <p>Review PDFs, MinerU Markdown, and structured metadata before topic-specific writing.</p>
+      </div>
+      <div class="search"><input id="search" placeholder="Search title, author, keyword, tag"></div>
+      <div id="papers" class="papers"></div>
+    </aside>
+    <section class="panel viewer">
+      <div class="tabs">
+        <button class="tab active" data-tab="pdf">PDF</button>
+        <button class="tab" data-tab="markdown">Markdown</button>
+      </div>
+      <div class="viewer-body">
+        <iframe id="pdfFrame"></iframe>
+        <div id="markdown" class="markdown" style="display:none"></div>
+      </div>
+    </section>
+    <section class="panel metadata">
+      <div class="meta-head">
+        <h2>Metadata</h2>
+        <div class="actions">
+          <button class="btn" id="reloadBtn">Reload</button>
+          <button class="btn primary" id="saveBtn">Save</button>
+          <button class="btn orange" id="reviewBtn">Mark reviewed</button>
+        </div>
+      </div>
+      <div id="metaSummary" class="meta-summary"></div>
+      <div class="editor-wrap">
+        <div class="editor-label">Editable JSON source of truth</div>
+        <textarea id="jsonEditor" spellcheck="false"></textarea>
+      </div>
+    </section>
+  </main>
+  <div id="message" class="message"></div>
+  <script>
+    let papers = [];
+    let selected = null;
+    let currentMeta = null;
+    const els = {
+      papers: document.getElementById('papers'),
+      search: document.getElementById('search'),
+      pdfFrame: document.getElementById('pdfFrame'),
+      markdown: document.getElementById('markdown'),
+      jsonEditor: document.getElementById('jsonEditor'),
+      metaSummary: document.getElementById('metaSummary'),
+      message: document.getElementById('message')
+    };
+    function field(meta, key, fallback = '') {
+      const value = meta?.[key];
+      if (value && typeof value === 'object' && 'value' in value) return value.value ?? fallback;
+      return value ?? fallback;
+    }
+    function showMessage(text) {
+      els.message.textContent = text;
+      els.message.classList.add('show');
+      setTimeout(() => els.message.classList.remove('show'), 2800);
+    }
+    function escapeHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    }
+    function renderMarkdown(md) {
+      let html = escapeHtml(md);
+      html = html.replace(/^### (.*)$/gm, '<h3>$1</h3>').replace(/^## (.*)$/gm, '<h2>$1</h2>').replace(/^# (.*)$/gm, '<h1>$1</h1>');
+      html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="/file?paper_id=' + encodeURIComponent(selected || '') + '&path=$2">');
+      return html.split(/\n{2,}/).map(block => /^<h[123]|^<img/.test(block) ? block : '<p>' + block.replace(/\n/g, '<br>') + '</p>').join('\n');
+    }
+    function renderList() {
+      const q = els.search.value.trim().toLowerCase();
+      const filtered = papers.filter(p => [p.paper_id, p.title, p.year, p.journal, ...(p.authors||[]), ...(p.keywords||[]), ...(p.tags||[])].join(' ').toLowerCase().includes(q));
+      els.papers.innerHTML = filtered.map(p => {
+        const active = selected === p.paper_id ? ' active' : '';
+        const statusClass = p.human_review_status === 'reviewed' ? 'reviewed' : (p.needs_human_check ? 'warn' : '');
+        const status = p.human_review_status === 'reviewed' ? 'reviewed' : (p.needs_human_check ? 'needs check' : 'ok');
+        return `<button class="paper-card${active}" data-id="${escapeHtml(p.paper_id)}">
+          <div class="paper-id">${escapeHtml(p.paper_id)}</div>
+          <div class="paper-title">${escapeHtml(p.title || '(untitled)')}</div>
+          <div class="paper-meta">${escapeHtml([p.year, p.journal].filter(Boolean).join(' · '))}</div>
+          <span class="status ${statusClass}">${escapeHtml(status)}</span>
+        </button>`;
+      }).join('');
+    }
+    function renderSummary(meta) {
+      const tags = [...(field(meta,'keywords',[])||[]), ...(field(meta,'llm_tags',[])||[]), ...(meta.human_tags||[])];
+      els.metaSummary.innerHTML = `
+        <div class="field"><div class="label">Title</div><div class="value">${escapeHtml(field(meta,'title'))}</div></div>
+        <div class="field"><div class="label">Authors</div><div class="value">${escapeHtml((field(meta,'authors',[])||[]).join(', '))}</div></div>
+        <div class="field"><div class="label">Journal / Year / DOI</div><div class="value">${escapeHtml([field(meta,'journal'), field(meta,'year'), field(meta,'doi')].filter(Boolean).join(' · '))}</div></div>
+        <div class="field"><div class="label">Keywords and Tags</div><div class="value">${tags.map(t=>`<span class="tag">${escapeHtml(t)}</span>`).join('')}</div></div>
+        <div class="field"><div class="label">Abstract</div><div class="value">${escapeHtml(field(meta,'abstract')).slice(0,900)}</div></div>
+        <div class="field"><div class="label">Quality</div><div class="value">${escapeHtml(JSON.stringify(meta.quality || {}, null, 0))}</div></div>`;
+    }
+    async function loadPapers() {
+      papers = await (await fetch('/api/papers')).json();
+      renderList();
+      if (papers.length && !selected) await selectPaper(papers[0].paper_id);
+    }
+    async function selectPaper(id) {
+      selected = id;
+      renderList();
+      currentMeta = await (await fetch(`/api/metadata/${encodeURIComponent(id)}`)).json();
+      els.jsonEditor.value = JSON.stringify(currentMeta, null, 2);
+      renderSummary(currentMeta);
+      const pdf = currentMeta.source_paths?.pdf;
+      els.pdfFrame.src = pdf ? `/file?path=${encodeURIComponent(pdf)}` : 'about:blank';
+      const md = await (await fetch(`/api/markdown/${encodeURIComponent(id)}`)).text();
+      els.markdown.innerHTML = renderMarkdown(md);
+    }
+    async function saveMeta() {
+      if (!selected) return;
+      let parsed;
+      try { parsed = JSON.parse(els.jsonEditor.value); } catch (err) { showMessage(`Invalid JSON: ${err.message}`); return; }
+      const res = await fetch(`/api/metadata/${encodeURIComponent(selected)}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(parsed)});
+      if (!res.ok) { showMessage(await res.text()); return; }
+      showMessage('Metadata saved');
+      await loadPapers(); await selectPaper(selected);
+    }
+    async function markReviewed() {
+      const parsed = JSON.parse(els.jsonEditor.value);
+      parsed.human_review = parsed.human_review || {};
+      parsed.human_review.status = 'reviewed';
+      parsed.human_review.reviewed_at = new Date().toISOString();
+      parsed.human_review.reviewer = parsed.human_review.reviewer || 'human';
+      els.jsonEditor.value = JSON.stringify(parsed, null, 2);
+      await saveMeta();
+    }
+    els.search.addEventListener('input', renderList);
+    els.papers.addEventListener('click', e => { const card = e.target.closest('.paper-card'); if (card) selectPaper(card.dataset.id); });
+    document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const mode = tab.dataset.tab;
+      els.pdfFrame.style.display = mode === 'pdf' ? 'block' : 'none';
+      els.markdown.style.display = mode === 'markdown' ? 'block' : 'none';
+    }));
+    document.getElementById('saveBtn').addEventListener('click', saveMeta);
+    document.getElementById('reloadBtn').addEventListener('click', () => selected && selectPaper(selected));
+    document.getElementById('reviewBtn').addEventListener('click', markReviewed);
+    loadPapers().catch(err => showMessage(err.message));
+  </script>
+</body>
+</html>

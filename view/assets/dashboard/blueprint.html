@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review Blueprint</title>
+  <style>
+    :root{--ink:#1d241f;--muted:#69756d;--line:#dacdb8;--green:#1f6b55;--orange:#bd6b35;--shadow:0 18px 46px rgba(55,43,24,.14)}
+    *{box-sizing:border-box} body{margin:0;color:var(--ink);background:linear-gradient(135deg,#f1e7d3,#fbf7ec 48%,#eadcc4);font-family:Georgia,"Times New Roman",serif;height:100vh;overflow:hidden}
+    button,select{font:inherit}.nav{height:58px;padding:8px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(255,250,240,.94);border-bottom:1px solid var(--line)}
+    .nav-title{font-weight:700;font-size:18px;white-space:nowrap}.nav-center{flex:1;text-align:center}.project-select{min-width:280px;max-width:520px;border:1px solid var(--line);background:#fffdf7;border-radius:999px;padding:8px 12px}
+    .nav-right{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.nav a{text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:999px;padding:7px 10px;background:#fffdf7;white-space:nowrap;font-size:14px}.nav a.active{background:var(--green);border-color:var(--green);color:white}
+    .app{height:calc(100vh - 58px);display:grid;grid-template-columns:320px minmax(520px,1fr) 380px;gap:14px;padding:14px}.panel{background:rgba(255,250,240,.94);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden;min-height:0;display:flex;flex-direction:column}
+    .head,.tabs{padding:14px;border-bottom:1px solid var(--line)}h1,h2,h3{margin:0;letter-spacing:-.02em}h1{font-size:22px}h2{font-size:18px}.sub{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.35}
+    .list,.main,.side{overflow:auto;min-height:0}.list{padding:9px}.card{width:100%;text-align:left;border:1px solid transparent;background:#fffdf7;border-radius:12px;padding:10px;margin-bottom:8px;cursor:pointer;color:var(--ink)}.card:hover,.card.active{border-color:var(--green);background:#f2faf0}
+    .title{font-weight:700;font-size:14px;line-height:1.25}.meta{color:var(--muted);font-size:12px;margin-top:5px;line-height:1.35}.pill{display:inline-block;font-size:11px;padding:3px 7px;border-radius:999px;background:#e4efe4;color:#285a37;margin:5px 4px 0 0}.warn{background:#f6dfd3;color:#873e1e}
+    .main{background:#fffdf7;padding:24px 30px;line-height:1.58;font-size:15px}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tab{border:1px solid var(--line);border-radius:999px;background:#fffdf7;padding:7px 10px;cursor:pointer}.tab.active{background:var(--green);color:white;border-color:var(--green)}
+    .field{margin-bottom:14px}.label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}.value{line-height:1.45;white-space:pre-wrap}.side{padding:14px}pre{white-space:pre-wrap;margin:0;font-family:Consolas,monospace;font-size:12px}
+  </style>
+  <link rel="stylesheet" href="/assets/dashboard/review-ui.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-title">ChemVellum</div><div class="nav-center"><select id="projectSelect" class="project-select"></select></div>
+    <div class="nav-right"><a href="/library">Library</a><a href="/discovery">Discovery</a><a href="/matrix">Matrix</a><a class="active" href="/blueprint">Blueprint</a><a href="/sections">Sections</a><a href="/figures">Figures</a><a href="/draft">Draft</a><a href="/final">Final</a></div>
+  </nav>
+  <main class="app">
+    <section class="panel"><div class="head"><h1>Section Blueprint</h1><div id="projectInfo" class="sub">Loading...</div></div><div id="sectionList" class="list"></div></section>
+    <section class="panel"><div class="head"><h2 id="mainTitle">Blueprint Detail</h2><div id="mainMeta" class="sub"></div></div><div class="tabs"><button class="tab active" data-tab="section">Section</button><button class="tab" data-tab="plan">Writing Plan</button><button class="tab" data-tab="outline">Selected Outline</button><button class="tab" data-tab="json">Raw JSON</button></div><div id="main" class="main"></div></section>
+    <section class="panel"><div class="head"><h2>Review Gate</h2><div class="sub">Confirm every section has papers, claims, and figure/table needs.</div></div><div id="summary" class="side"></div></section>
+  </main>
+  <script src="/assets/dashboard/review-ui.js"></script>
+  <script>
+    let projects=[], selectedProject='', payload=null, selectedSection='', tab='section';
+    const $=id=>document.getElementById(id); const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    const sections=()=>payload?.section_blueprint?.sections||[];
+    function md(s){return String(s||'').split(/\n{2,}/).map(b=>{b=b.trim();if(!b)return'';let m=b.match(/^###\s+(.+)/);if(m)return`<h3>${esc(m[1])}</h3>`;m=b.match(/^##\s+(.+)/);if(m)return`<h2>${esc(m[1])}</h2>`;m=b.match(/^#\s+(.+)/);if(m)return`<h1>${esc(m[1])}</h1>`;return`<p>${esc(b).replace(/\n/g,'<br>')}</p>`}).join('')}
+    function missing(s){let misses=[]; if(!(s.assigned_papers||s.major_papers||[]).length)misses.push('papers'); if(!(s.paragraph_plan||s.review_claims||[]).length)misses.push('paragraphs'); if(!(s.required_figures||s.figure_or_table_needs||[]).length)misses.push('figures'); return misses}
+    async function loadProjects(){projects=await(await fetch('/api/projects')).json();$('projectSelect').innerHTML=projects.map(p=>`<option value="${esc(p.project_id)}">${esc(p.project_id)}</option>`).join(''); if(projects[0])loadProject(projects[0].project_id)}
+    async function loadProject(id){selectedProject=id;payload=await(await fetch(`/api/project/${encodeURIComponent(id)}/blueprint`)).json();selectedSection=(sections()[0]||{}).section_id||'';render()}
+    function renderList(){$('sectionList').innerHTML=sections().map(s=>{const m=missing(s);return`<button class="card ${s.section_id===selectedSection?'active':''}" data-id="${esc(s.section_id)}"><div class="title">${esc(s.section_id)} · ${esc(s.title||'Untitled')}</div><div class="meta">${esc(s.section_thesis||s.section_goal||'')}</div>${m.length?`<span class="pill warn">missing ${esc(m.join(','))}</span>`:`<span class="pill">ready</span>`}</button>`}).join('')||'<div class="empty">No section blueprint found.</div>'}
+    function renderSection(){const s=sections().find(x=>x.section_id===selectedSection)||{};$('mainTitle').textContent=s.title||'Blueprint Detail';$('mainMeta').textContent=s.section_id||'';$('main').innerHTML=['section_thesis','review_problem','target_words','major_papers','review_claims','figure_or_table_needs','depth_requirements','avoid_patterns','section_transition'].map(k=>`<div class="field"><div class="label">${k}</div><div class="value">${esc(typeof s[k]==='object'?JSON.stringify(s[k],null,2):(s[k]||''))}</div></div>`).join('')}
+    function renderMain(){if(tab==='section')renderSection();else if(tab==='plan')$('main').innerHTML=md(payload?.section_writing_plan_md);else if(tab==='outline')$('main').innerHTML=md(payload?.selected_outline_md);else $('main').innerHTML=`<pre>${esc(JSON.stringify(payload?.section_blueprint||{},null,2))}</pre>`}
+    function renderSummary(){const secs=sections();const bad=secs.filter(s=>missing(s).length);const status=secs.length&&bad.length===0?'Ready for section drafting':'Needs blueprint check';$('projectInfo').textContent=`${selectedProject} · ${payload?.topic||''}`;$('summary').innerHTML=`<div class="field"><div class="label">Status</div><div class="value">${status}</div></div><div class="field"><div class="label">Sections</div><div class="value">${secs.length}</div></div><div class="field"><div class="label">Incomplete Sections</div><div class="value">${bad.length}</div></div><div class="field"><div class="label">Writing Plan</div><div class="value">${payload?.section_writing_plan_md?'present':'missing'}</div></div><div class="field"><div class="label">Human Check</div><div class="value">1. 每节是否有明确 thesis。\\n2. major_papers 是否足够且无明显错配。\\n3. review_claims 是否能支撑段落写作。\\n4. figure_or_table_needs 是否明确。</div></div>`}
+    function render(){renderList();renderMain();renderSummary()}
+    $('projectSelect').addEventListener('change',e=>loadProject(e.target.value));$('sectionList').addEventListener('click',e=>{const b=e.target.closest('[data-id]');if(!b)return;selectedSection=b.dataset.id;tab='section';document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));render()});document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{tab=t.dataset.tab;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t));renderMain()}));loadProjects();
+  </script>
+</body>
+</html>

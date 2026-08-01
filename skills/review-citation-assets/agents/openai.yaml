@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Citation and Asset Tools"
+  short_description: "Insert assets and number stable paper citations."
+  default_prompt: "Use $review-citation-assets to insert explicitly chosen figures or schemes and generate numbered references from stable paper IDs."

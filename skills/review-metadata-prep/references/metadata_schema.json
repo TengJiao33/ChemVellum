@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReviewWriterPaperMetadata",
+  "type": "object",
+  "required": [
+    "paper_id",
+    "slug",
+    "title",
+    "authors",
+    "year",
+    "journal",
+    "doi",
+    "abstract",
+    "structured_tags",
+    "source_paths",
+    "extraction",
+    "human_review",
+    "quality"
+  ],
+  "properties": {
+    "paper_id": { "type": "string" },
+    "slug": { "type": "string" },
+    "title": { "$ref": "#/$defs/scored_string" },
+    "authors": { "$ref": "#/$defs/scored_string_array" },
+    "year": { "$ref": "#/$defs/scored_integer_or_null" },
+    "journal": { "$ref": "#/$defs/scored_string_or_null" },
+    "doi": { "$ref": "#/$defs/scored_string_or_null" },
+    "abstract": { "$ref": "#/$defs/scored_string" },
+    "structured_tags": { "$ref": "#/$defs/scored_structured_tags" },
+    "source_paths": {
+      "type": "object",
+      "required": ["pdf", "markdown", "content_list", "extracted_dir"],
+      "properties": {
+        "pdf": { "type": ["string", "null"] },
+        "markdown": { "type": ["string", "null"] },
+        "content_list": { "type": ["string", "null"] },
+        "extracted_dir": { "type": ["string", "null"] }
+      }
+    },
+    "extraction": {
+      "type": "object",
+      "required": ["mode", "model", "created_at", "inputs", "notes"],
+      "properties": {
+        "mode": { "type": "string" },
+        "model": { "type": ["string", "null"] },
+        "created_at": { "type": "string" },
+        "inputs": { "type": "object" },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "human_review": {
+      "type": "object",
+      "required": ["status", "reviewed_at", "reviewer", "notes"],
+      "properties": {
+        "status": { "type": "string" },
+        "reviewed_at": { "type": ["string", "null"] },
+        "reviewer": { "type": ["string", "null"] },
+        "notes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": ["missing_fields", "warnings", "overall_confidence", "needs_human_check"],
+      "properties": {
+        "missing_fields": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } },
+        "overall_confidence": { "type": "number" },
+        "needs_human_check": { "type": "boolean" }
+      }
+    }
+  },
+  "$defs": {
+    "scored_string": {
+      "type": "object",
+      "required": ["value", "source", "confidence", "human_checked"],
+      "properties": {
+        "value": { "type": "string" },
+        "source": { "type": "string" },
+        "confidence": { "type": "number" },
+        "human_checked": { "type": "boolean" }
+      }
+    },
+    "scored_string_or_null": {
+      "type": "object",
+      "required": ["value", "source", "confidence", "human_checked"],
+      "properties": {
+        "value": { "type": ["string", "null"] },
+        "source": { "type": "string" },
+        "confidence": { "type": "number" },
+        "human_checked": { "type": "boolean" }
+      }
+    },
+    "scored_integer_or_null": {
+      "type": "object",
+      "required": ["value", "source", "confidence", "human_checked"],
+      "properties": {
+        "value": { "type": ["integer", "null"] },
+        "source": { "type": "string" },
+        "confidence": { "type": "number" },
+        "human_checked": { "type": "boolean" }
+      }
+    },
+    "scored_string_array": {
+      "type": "object",
+      "required": ["value", "source", "confidence", "human_checked"],
+      "properties": {
+        "value": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "source": { "type": "string" },
+        "confidence": { "type": "number" },
+        "human_checked": { "type": "boolean" }
+      }
+    },
+    "scored_structured_tags": {
+      "type": "object",
+      "required": ["value", "source", "confidence", "human_checked"],
+      "properties": {
+        "value": {
+          "type": "object",
+          "required": [
+            "product",
+            "substrate",
+            "catalyst_or_method",
+            "organometallic_partner",
+            "ligand_or_chiral_source",
+            "leaving_group",
+            "reaction_type",
+            "document_scope"
+          ],
+          "properties": {
+            "product": { "type": "string" },
+            "substrate": { "type": "string" },
+            "catalyst_or_method": { "type": "string" },
+            "organometallic_partner": { "type": "string" },
+            "ligand_or_chiral_source": { "type": "string" },
+            "leaving_group": { "type": "string" },
+            "reaction_type": { "type": "string" },
+            "document_scope": { "type": "string" }
+          }
+        },
+        "source": { "type": "string" },
+        "confidence": { "type": "number" },
+        "human_checked": { "type": "boolean" }
+      }
+    }
+  }
+}

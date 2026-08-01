@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review Topic Discovery</title>
+  <style>
+    :root {
+      --ink: #1b241f;
+      --muted: #69756d;
+      --panel: #fffaf0;
+      --line: #dacdb8;
+      --green: #1f6b55;
+      --orange: #bd6b35;
+      --red: #9f3b36;
+      --shadow: 0 18px 46px rgba(55, 43, 24, .14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(31,107,85,.16), transparent 24rem),
+        radial-gradient(circle at 84% 16%, rgba(189,107,53,.16), transparent 28rem),
+        linear-gradient(135deg, #f1e7d3, #fbf7ec 48%, #eadcc4);
+      font-family: Georgia, "Times New Roman", serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+    button, input, select { font: inherit; }
+    .nav {
+      height: 58px;
+      padding: 9px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255,250,240,.92);
+      border-bottom: 1px solid var(--line);
+      gap: 12px;
+    }
+    .nav-title { font-weight: 700; font-size: 18px; }
+    .nav-center { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; justify-content: center; }
+    .nav-right { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+    .nav a {
+      display: inline-block;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #fffdf7;
+      white-space: nowrap;
+      font-size: 14px;
+    }
+    .nav a.active { background: var(--green); border-color: var(--green); color: white; }
+    .project-select {
+      min-width: 280px;
+      max-width: 520px;
+      border: 1px solid var(--line);
+      background: #fffdf7;
+      border-radius: 999px;
+      padding: 8px 12px;
+      outline: none;
+    }
+    .app {
+      height: calc(100vh - 58px);
+      display: grid;
+      grid-template-columns: 300px 420px minmax(520px, 1fr);
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      background: rgba(255,250,240,.94);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .head { padding: 16px; border-bottom: 1px solid var(--line); }
+    h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
+    h1 { font-size: 23px; }
+    h2 { font-size: 18px; }
+    .sub { margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.35; }
+    .toolbar, .detail-tabs {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    input, select {
+      border: 1px solid var(--line);
+      background: #fffdf7;
+      border-radius: 999px;
+      padding: 8px 11px;
+      outline: none;
+      min-width: 0;
+    }
+    .btn, .tab {
+      border: 1px solid var(--line);
+      background: #fffdf7;
+      border-radius: 999px;
+      padding: 8px 11px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .btn.primary, .tab.active { color: white; background: var(--green); border-color: var(--green); }
+    .btn.orange { color: white; background: var(--orange); border-color: var(--orange); }
+    .btn.red { color: white; background: var(--red); border-color: var(--red); }
+    .list, .results { overflow: auto; padding: 9px; }
+    .card, .result {
+      background: #fffdf7;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      padding: 11px;
+      margin-bottom: 8px;
+      color: var(--ink);
+    }
+    .card {
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
+    }
+    .card:hover, .card.active { border-color: var(--green); background: #f2faf0; }
+    .card.deleted, .result.drop { opacity: .45; background: #f5eadf; }
+    .k-title, .r-title { font-weight: 700; font-size: 15px; line-height: 1.25; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.35; }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #e4efe4;
+      color: #285a37;
+      margin: 5px 4px 0 0;
+    }
+    .pill.web { background: #e4ebf4; color: #254c74; }
+    .r-actions { margin-top: 10px; display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+    .detail-body { flex: 1; min-height: 0; overflow: auto; background: #fffdf7; }
+    iframe { width: 100%; height: 100%; border: 0; background: white; }
+    pre {
+      margin: 0;
+      padding: 16px;
+      white-space: pre-wrap;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .markdown {
+      height: 100%;
+      overflow: auto;
+      padding: 28px 34px;
+      background: #fffdf7;
+      line-height: 1.58;
+      font-size: 16px;
+    }
+    .markdown img { max-width: 100%; border: 1px solid var(--line); border-radius: 10px; }
+    .markdown table {
+      border-collapse: collapse;
+      width: max-content;
+      max-width: 100%;
+      margin: 18px 0;
+      background: white;
+      font-size: 13px;
+      line-height: 1.35;
+      display: block;
+      overflow-x: auto;
+    }
+    .markdown th, .markdown td {
+      border: 1px solid #cfc2aa;
+      padding: 7px 9px;
+      vertical-align: top;
+      min-width: 72px;
+    }
+    .markdown th, .markdown tr:first-child td {
+      background: #efe6d4;
+      font-weight: 700;
+    }
+    .markdown details {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbf4e5;
+    }
+    .markdown summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .markdown .math {
+      font-family: "Times New Roman", Georgia, serif;
+      white-space: nowrap;
+    }
+    .markdown .caption {
+      margin: 16px 0 8px;
+      font-weight: 700;
+      color: #4d3923;
+    }
+    .markdown .raw-block {
+      margin: 12px 0;
+    }
+    .summary {
+      padding: 16px;
+      line-height: 1.45;
+    }
+    .message {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      padding: 11px 15px;
+      border-radius: 12px;
+      background: #15251f;
+      color: white;
+      box-shadow: var(--shadow);
+      display: none;
+      max-width: 420px;
+    }
+    .message.show { display: block; }
+  </style>
+  <link rel="stylesheet" href="/assets/dashboard/review-ui.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-title">ChemVellum Dashboard</div>
+    <div class="nav-center">
+      <select id="globalProjectSelect" class="project-select"></select>
+    </div>
+    <div class="nav-right">
+      <a href="/library">Library</a>
+      <a class="active" href="/discovery">Discovery</a>
+      <a href="/matrix">Matrix</a>
+      <a href="/blueprint">Blueprint</a>
+      <a href="/sections">Sections</a>
+      <a href="/figures">Figures</a>
+      <a href="/draft">Draft</a>
+      <a href="/final">Final</a>
+    </div>
+  </nav>
+  <main class="app">
+    <section class="panel">
+      <div class="head">
+        <h1>Discovery Check</h1>
+        <div id="projectInfo" class="sub">Loading project...</div>
+      </div>
+      <div class="toolbar">
+        <select id="projectSelect"></select>
+        <button class="btn" id="reloadBtn">Reload</button>
+        <button class="btn primary" id="saveBtn">Save</button>
+        <button class="btn orange" id="confirmBtn">Confirm</button>
+      </div>
+      <div class="toolbar">
+        <input id="keywordFilter" placeholder="Filter keywords">
+        <select id="centerFilter">
+          <option value="all">All centers</option>
+          <option value="general">General / Review</option>
+          <option value="palladium">Pd</option>
+          <option value="gold_silver">Au / Ag</option>
+          <option value="copper">Cu</option>
+          <option value="rhodium">Rh</option>
+          <option value="nickel">Ni</option>
+          <option value="transfer_template">Transfer / Template</option>
+          <option value="nonmetal">Non-metal</option>
+        </select>
+      </div>
+      <div id="keywordList" class="list"></div>
+    </section>
+    <section class="panel">
+      <div class="head">
+        <h2 id="keywordTitle">Keyword Results</h2>
+        <div id="keywordMeta" class="sub"></div>
+      </div>
+      <div class="toolbar"><button class="btn" id="toggleKeywordBtn">Toggle keyword keep</button></div>
+      <div id="results" class="results"></div>
+    </section>
+    <section class="panel">
+      <div class="head">
+        <h2 id="detailTitle">Paper Detail</h2>
+        <div id="detailMeta" class="sub"></div>
+      </div>
+      <div class="detail-tabs">
+        <button class="tab active" data-tab="summary">Summary</button>
+        <button class="tab" data-tab="pdf">PDF</button>
+        <button class="tab" data-tab="markdown">Markdown</button>
+        <button class="tab" data-tab="metadata">Metadata</button>
+      </div>
+      <div class="detail-body">
+        <div id="summary" class="summary"></div>
+        <iframe id="pdfFrame" style="display:none"></iframe>
+        <div id="markdown" class="markdown" style="display:none"></div>
+        <pre id="metadata" style="display:none"></pre>
+      </div>
+    </section>
+  </main>
+  <div id="message" class="message"></div>
+  <script src="/assets/dashboard/review-ui.js"></script>
+  <script>
+    let projects = [], selected = null, data = null, selectedKeyword = null, selectedPaper = null;
+    const requestedProject = new URLSearchParams(window.location.search).get('project') || '';
+    const els = {
+      globalProjectSelect: document.getElementById('globalProjectSelect'),
+      projectInfo: document.getElementById('projectInfo'), projectSelect: document.getElementById('projectSelect'),
+      keywordList: document.getElementById('keywordList'), keywordFilter: document.getElementById('keywordFilter'), centerFilter: document.getElementById('centerFilter'),
+      keywordTitle: document.getElementById('keywordTitle'), keywordMeta: document.getElementById('keywordMeta'),
+      results: document.getElementById('results'), detailTitle: document.getElementById('detailTitle'),
+      detailMeta: document.getElementById('detailMeta'), summary: document.getElementById('summary'),
+      pdfFrame: document.getElementById('pdfFrame'), markdown: document.getElementById('markdown'),
+      metadata: document.getElementById('metadata'), message: document.getElementById('message')
+    };
+    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+    function msg(text) { els.message.textContent = text; els.message.classList.add('show'); setTimeout(() => els.message.classList.remove('show'), 2600); }
+    function simpleMathToHtml(expr) {
+      let s = String(expr ?? '');
+      s = s.replace(/\\mathrm\s*\{\s*([^{}]+?)\s*\}/g, '$1');
+      s = s.replace(/\\prime/g, '′');
+      s = s.replace(/\\[a-zA-Z]+/g, '');
+      s = s.replace(/\s+/g, ' ').trim();
+      s = esc(s);
+      s = s.replace(/_\s*\{\s*([^{}]+?)\s*\}/g, '<sub>$1</sub>');
+      s = s.replace(/\^\s*\{\s*([^{}]+?)\s*\}/g, '<sup>$1</sup>');
+      s = s.replace(/_([A-Za-z0-9′+-]+)/g, '<sub>$1</sub>');
+      s = s.replace(/\^([A-Za-z0-9′+-]+)/g, '<sup>$1</sup>');
+      return `<span class="math">${s}</span>`;
+    }
+    function renderInline(text) {
+      const parts = String(text ?? '').split(/(\$[^$\n]+\$)/g);
+      return parts.map(part => {
+        if (part.startsWith('$') && part.endsWith('$')) return simpleMathToHtml(part.slice(1, -1));
+        return esc(part);
+      }).join('');
+    }
+    function sanitizeAllowedHtml(raw) {
+      const allowedTags = new Set(['DIV','DETAILS','SUMMARY','TABLE','THEAD','TBODY','TFOOT','TR','TH','TD','CAPTION','P','BR','B','STRONG','I','EM','SUB','SUP','SPAN','IMG']);
+      const template = document.createElement('template');
+      template.innerHTML = raw;
+      const walk = node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const span = document.createElement('span');
+          span.innerHTML = renderInline(node.textContent || '');
+          node.replaceWith(...Array.from(span.childNodes));
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        if (!allowedTags.has(node.tagName)) {
+          const text = document.createTextNode(node.textContent || '');
+          node.replaceWith(text);
+          return;
+        }
+        [...node.attributes].forEach(attr => {
+          const name = attr.name.toLowerCase();
+          if (!['colspan', 'rowspan', 'open', 'class', 'src', 'alt'].includes(name)) node.removeAttribute(attr.name);
+          if (name === 'src' && !String(attr.value || '').startsWith('/file?')) node.removeAttribute(attr.name);
+        });
+        [...node.childNodes].forEach(walk);
+      };
+      [...template.content.childNodes].forEach(walk);
+      return template.innerHTML;
+    }
+    function renderMarkdown(md, paperId) {
+      const blocks = [];
+      const stash = html => {
+        const key = `@@HTML_BLOCK_${blocks.length}@@`;
+        blocks.push(sanitizeAllowedHtml(html));
+        return key;
+      };
+      let text = String(md ?? '');
+      text = text.replace(/<details[\s\S]*?<\/details>/gi, match => stash(`<div class="raw-block">${match}</div>`));
+      text = text.replace(/<table[\s\S]*?<\/table>/gi, match => stash(match));
+      text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, path) => {
+        const src = `/file?paper_id=${encodeURIComponent(paperId || '')}&path=${encodeURIComponent(path)}`;
+        return stash(`<img alt="${esc(alt)}" src="${src}">`);
+      });
+      const html = text.split(/\n{2,}/).map(rawBlock => {
+        const block = rawBlock.trim();
+        if (!block) return '';
+        const marker = block.match(/^@@HTML_BLOCK_(\d+)@@$/);
+        if (marker) return blocks[Number(marker[1])] || '';
+        let m = block.match(/^###\s+(.+)$/);
+        if (m) return `<h3>${renderInline(m[1])}</h3>`;
+        m = block.match(/^##\s+(.+)$/);
+        if (m) return `<h2>${renderInline(m[1])}</h2>`;
+        m = block.match(/^#\s+(.+)$/);
+        if (m) return `<h1>${renderInline(m[1])}</h1>`;
+        if (/^(Scheme|Table|Figure)\s+\d+/i.test(block)) return `<div class="caption">${renderInline(block).replace(/\n/g, '<br>')}</div>`;
+        return `<p>${renderInline(block).replace(/\n/g, '<br>')}</p>`;
+      }).join('\n');
+      return html.replace(/@@HTML_BLOCK_(\d+)@@/g, (_, i) => blocks[Number(i)] || '');
+    }
+    async function loadProjects() {
+      projects = (await (await fetch('/api/projects')).json()).filter(p => p.has_discovery);
+      els.globalProjectSelect.innerHTML = projects.map(p => `<option value="${esc(p.project_id)}">${esc(p.project_id)}</option>`).join('');
+      els.projectSelect.innerHTML = projects.map(p => `<option value="${esc(p.project_id)}">${esc(p.project_id)}</option>`).join('');
+      if (projects.length) {
+        selected = projects.find(p => p.project_id === requestedProject)?.project_id || projects[0].project_id;
+        els.projectSelect.value = selected;
+        els.globalProjectSelect.value = selected;
+        await loadProject(selected);
+      }
+      else { els.projectInfo.textContent = 'No discovery projects found.'; }
+    }
+    async function loadProject(id) {
+      selected = id;
+      data = await (await fetch(`/api/discovery/${encodeURIComponent(id)}`)).json();
+      els.projectSelect.value = id;
+      els.globalProjectSelect.value = id;
+      selectedKeyword = data.results.find(g => g.keep !== false)?.keyword || data.results[0]?.keyword;
+      selectedPaper = null;
+      renderAll();
+    }
+    function classifyCenter(keyword='') {
+      const k = keyword.toLowerCase();
+      if (k.includes('palladium') || k.includes('pd-catalyzed')) return 'palladium';
+      if (k.includes('gold') || k.includes('au-catalyzed') || k.includes('silver') || k.includes('ag-catalyzed')) return 'gold_silver';
+      if (k.includes('copper') || k.includes('cu-catalyzed') || k.includes('trisubstituted allenes')) return 'copper';
+      if (k.includes('rhodium') || k.includes('rh-catalyzed') || k.includes('enynone')) return 'rhodium';
+      if (k.includes('nickel') || k.includes('ni-catalyzed')) return 'nickel';
+      if (k.includes('terminal alkyne asymmetric allene synthesis') || k.includes('chirality transfer')) return 'transfer_template';
+      if (k.includes('organocatalytic') || k.includes('enzymatic') || k.includes('dynamic kinetic resolution')) return 'nonmetal';
+      return 'general';
+    }
+    function centerLabel(center) {
+      return {
+        general: 'General / Review',
+        palladium: 'Pd',
+        gold_silver: 'Au / Ag',
+        copper: 'Cu',
+        rhodium: 'Rh',
+        nickel: 'Ni',
+        transfer_template: 'Transfer / Template',
+        nonmetal: 'Non-metal'
+      }[center] || center;
+    }
+    function currentGroup() { return data?.results?.find(g => g.keyword === selectedKeyword); }
+    function renderAll() { renderKeywords(); renderResults(); renderDetail(); }
+    function renderKeywords() {
+      const groups = data?.results || [];
+      const counts = {};
+      for (const g of groups) {
+        const c = classifyCenter(g.keyword);
+        counts[c] = (counts[c] || 0) + (g.local_results || []).filter(r => r.keep !== false).length;
+      }
+      const countText = Object.entries(counts).map(([k,v]) => `${centerLabel(k)}:${v}`).join(' · ');
+      els.projectInfo.textContent = `${selected} · ${data?.topic || ''}${countText ? ' · ' + countText : ''}`;
+      const q = els.keywordFilter.value.toLowerCase();
+      const center = els.centerFilter.value;
+      els.keywordList.innerHTML = groups
+        .filter(g => g.keyword.toLowerCase().includes(q))
+        .filter(g => center === 'all' || classifyCenter(g.keyword) === center)
+        .map(g => `
+        <button class="card ${selectedKeyword===g.keyword?'active':''} ${g.keep===false?'deleted':''}" data-keyword="${esc(g.keyword)}">
+          <div class="k-title">${esc(g.keyword)}</div>
+          <div class="meta">${esc(centerLabel(classifyCenter(g.keyword)))} · ${esc(g.category || '')}</div>
+          <span class="pill">${(g.local_results||[]).filter(r=>r.keep!==false).length} local</span>
+          <span class="pill web">${(g.web_results||[]).filter(r=>r.keep!==false).length} external</span>
+        </button>`).join('');
+    }
+    function renderResults() {
+      const g = currentGroup();
+      if (!g) { els.results.innerHTML = ''; return; }
+      els.keywordTitle.textContent = g.keyword;
+      els.keywordMeta.textContent = `${centerLabel(classifyCenter(g.keyword))} · ${g.category || ''} · keep=${g.keep !== false}`;
+      const rows = [...(g.local_results||[]).map(r => ({...r, kind:'local'})), ...(g.web_results||[]).map((r,i) => ({...r, kind:'web', webIndex:i}))];
+      els.results.innerHTML = rows.map(r => {
+        const id = r.kind === 'local' ? r.paper_id : `web-${r.webIndex}`;
+        return `<div class="result ${r.keep===false?'drop':''}">
+          <div class="r-title">${esc(r.title || '(untitled)')}</div>
+          <div class="meta">${esc([r.paper_id, r.year, r.journal, `score=${r.score}`, (Array.isArray(r.sources) && r.sources.length) ? `source=${r.sources.join('+')}` : (r.source ? `source=${r.source}` : null)].filter(Boolean).join(' · '))}</div>
+          <div class="meta">${esc(r.reason || '')} ${r.url ? `<a href="${esc(r.url)}" target="_blank">Open link</a>` : ''}</div>
+          <div class="r-actions">
+            <button class="btn ${r.keep===false?'primary':'red'}" data-action="toggle" data-kind="${r.kind}" data-id="${esc(id)}">${r.keep===false?'Restore':'Delete'}</button>
+            ${r.kind==='local' ? `<select data-role="${esc(id)}">${['core_candidate','supporting_candidate','background','uncertain','excluded'].map(x=>`<option ${r.role===x?'selected':''}>${x}</option>`).join('')}</select>` : ''}
+            <button class="btn" data-action="view" data-kind="${r.kind}" data-id="${esc(id)}">View</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    function findRow(kind, id) {
+      const g = currentGroup();
+      if (kind === 'local') return (g.local_results || []).find(r => r.paper_id === id);
+      return (g.web_results || [])[Number(id.replace('web-', ''))];
+    }
+    async function renderDetail() {
+      if (!selectedPaper) {
+        els.detailTitle.textContent = 'Paper Detail';
+        els.detailMeta.textContent = 'Select a paper result.';
+        els.summary.innerHTML = '<p>Select a local or web paper to inspect.</p>';
+        els.markdown.innerHTML = ''; els.metadata.textContent = ''; els.pdfFrame.src = 'about:blank';
+        return;
+      }
+      const r = selectedPaper.row;
+      els.detailTitle.textContent = r.title || '(untitled)';
+      els.detailMeta.textContent = selectedPaper.kind === 'local' ? `${r.paper_id} · ${r.year || ''} · ${r.journal || ''}` : `${r.year || ''} · ${r.journal || ''}`;
+      els.summary.innerHTML = `<h3>${esc(r.title)}</h3><p><strong>Score:</strong> ${esc(r.score)}</p><p><strong>Reason:</strong> ${esc(r.reason || '')}</p><p><strong>Role:</strong> ${esc(r.role || 'web_candidate')}</p>${r.url ? `<p><a href="${esc(r.url)}" target="_blank">Open web result</a></p>` : ''}`;
+      if (selectedPaper.kind === 'local') {
+        const meta = await (await fetch(`/api/local/metadata/${encodeURIComponent(r.paper_id)}`)).json();
+        els.metadata.textContent = JSON.stringify(meta, null, 2);
+        const md = await (await fetch(`/api/local/markdown/${encodeURIComponent(r.paper_id)}`)).text();
+        els.markdown.innerHTML = renderMarkdown(md, r.paper_id);
+        els.pdfFrame.src = meta.source_paths?.pdf ? `/file?path=${encodeURIComponent(meta.source_paths.pdf)}` : 'about:blank';
+      } else {
+        els.metadata.textContent = JSON.stringify(r, null, 2);
+        els.markdown.innerHTML = '<p>No local Markdown for web result.</p>';
+        els.pdfFrame.src = 'about:blank';
+      }
+    }
+    async function save(confirm=false) {
+      if (!selected) return;
+      const res = await fetch(`/api/discovery/${encodeURIComponent(selected)}${confirm?'?confirm=1':''}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+      if (!res.ok) { msg(await res.text()); return; }
+      msg(confirm ? 'Discovery confirmed and saved' : 'Saved');
+      await loadProject(selected);
+    }
+    els.keywordList.addEventListener('click', e => { const card = e.target.closest('[data-keyword]'); if (card) { selectedKeyword = card.dataset.keyword; selectedPaper = null; renderAll(); } });
+    els.results.addEventListener('click', async e => {
+      const btn = e.target.closest('[data-action]');
+      if (!btn) return;
+      const row = findRow(btn.dataset.kind, btn.dataset.id);
+      if (btn.dataset.action === 'toggle') row.keep = row.keep === false;
+      if (btn.dataset.action === 'view') selectedPaper = {kind: btn.dataset.kind, id: btn.dataset.id, row};
+      renderResults(); await renderDetail();
+    });
+    els.results.addEventListener('change', e => { const sel = e.target.closest('[data-role]'); if (sel) findRow('local', sel.dataset.role).role = sel.value; });
+    document.getElementById('projectSelect').addEventListener('change', e => loadProject(e.target.value));
+    els.globalProjectSelect.addEventListener('change', e => loadProject(e.target.value));
+    document.getElementById('reloadBtn').addEventListener('click', () => selected && loadProject(selected));
+    document.getElementById('saveBtn').addEventListener('click', () => save(false));
+    document.getElementById('confirmBtn').addEventListener('click', () => save(true));
+    document.getElementById('toggleKeywordBtn').addEventListener('click', () => { const g = currentGroup(); if (g) { g.keep = g.keep === false; renderAll(); } });
+    els.keywordFilter.addEventListener('input', renderKeywords);
+    els.centerFilter.addEventListener('change', () => {
+      const visible = (data?.results || []).filter(g => els.centerFilter.value === 'all' || classifyCenter(g.keyword) === els.centerFilter.value);
+      if (visible.length && !visible.find(g => g.keyword === selectedKeyword)) selectedKeyword = visible[0].keyword;
+      renderAll();
+    });
+    document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const map = {summary:'summary', pdf:'pdfFrame', markdown:'markdown', metadata:'metadata'};
+      for (const id of Object.values(map)) document.getElementById(id).style.display = 'none';
+      document.getElementById(map[tab.dataset.tab]).style.display = 'block';
+    }));
+    loadProjects().catch(err => msg(err.message));
+  </script>
+</body>
+</html>

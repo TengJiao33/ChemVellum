@@ -1,0 +1,510 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review First Draft</title>
+  <style>
+    :root {
+      --ink: #1f2024;
+      --muted: #69707b;
+      --panel: #fffaf1;
+      --line: #d7cbb7;
+      --green: #1e6a58;
+      --orange: #c46f33;
+      --shadow: 0 20px 52px rgba(48, 39, 24, .14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 10%, rgba(30,106,88,.14), transparent 24rem),
+        radial-gradient(circle at 88% 12%, rgba(196,111,51,.16), transparent 28rem),
+        linear-gradient(135deg, #efe3cc, #fbf6ea 46%, #eadfca);
+      font-family: Georgia, "Times New Roman", serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+    button, select, textarea { font: inherit; }
+    .nav {
+      height: 58px;
+      padding: 8px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: rgba(255,250,241,.94);
+      border-bottom: 1px solid var(--line);
+    }
+    .nav-title { font-weight: 700; font-size: 18px; white-space: nowrap; }
+    .nav-center { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; justify-content: center; }
+    .nav-right { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; justify-content: flex-end; }
+    .nav a {
+      display: inline-block;
+      text-decoration: none;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      background: #fffdf7;
+      white-space: nowrap;
+    }
+    .nav a.active { background: var(--green); border-color: var(--green); color: white; }
+    .project-select {
+      min-width: 280px;
+      max-width: 520px;
+      border: 1px solid var(--line);
+      background: #fffdf7;
+      border-radius: 999px;
+      padding: 8px 12px;
+      outline: none;
+    }
+    .app {
+      height: calc(100vh - 58px);
+      display: grid;
+      grid-template-columns: 320px minmax(520px, 1fr) 380px;
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      background: rgba(255,250,241,.94);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .head {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 18px; }
+    .sub { margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.35; }
+    .toolbar, .tabs {
+      padding: 10px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .btn, .tab {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 11px;
+      background: #fffdf7;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .btn.primary, .tab.active { color: white; background: var(--green); border-color: var(--green); }
+    .btn.orange { color: white; background: var(--orange); border-color: var(--orange); }
+    .list, .detail-body, .side-body { overflow: auto; min-height: 0; }
+    .list { padding: 9px; }
+    .item {
+      width: 100%;
+      text-align: left;
+      background: #fffdf7;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      padding: 11px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .item:hover, .item.active { border-color: var(--green); background: #f2faf0; }
+    .item-title { font-weight: 700; font-size: 15px; line-height: 1.25; }
+    .item-meta { color: var(--muted); font-size: 12px; margin-top: 5px; line-height: 1.35; }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #e4efe4;
+      color: #285a37;
+      margin: 5px 4px 0 0;
+    }
+    .draft-view, .markdown {
+      height: 100%;
+      overflow: auto;
+      padding: 28px 34px;
+      background: #fffdf7;
+      line-height: 1.6;
+      font-size: 16px;
+    }
+    .markdown img, .draft-view img { max-width: 100%; border: 1px solid var(--line); border-radius: 10px; }
+    .markdown a, .draft-view a { color: var(--green); text-decoration-thickness: 1px; }
+    .markdown code, .draft-view code {
+      padding: 2px 5px;
+      border-radius: 6px;
+      background: #efe6d4;
+      color: #5c3c20;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: .9em;
+    }
+    .markdown p:has(img), .draft-view p:has(img) { text-align: center; }
+    .markdown table, .draft-view table {
+      border-collapse: collapse;
+      width: max-content;
+      max-width: 100%;
+      margin: 18px 0;
+      background: white;
+      font-size: 13px;
+      line-height: 1.35;
+      display: block;
+      overflow-x: auto;
+    }
+    .markdown th, .markdown td, .draft-view th, .draft-view td {
+      border: 1px solid #cfc2aa;
+      padding: 7px 9px;
+      vertical-align: top;
+      min-width: 72px;
+    }
+    .markdown th, .markdown tr:first-child td, .draft-view th, .draft-view tr:first-child td {
+      background: #efe6d4;
+      font-weight: 700;
+    }
+    .markdown details, .draft-view details {
+      margin: 14px 0;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbf4e5;
+    }
+    .markdown summary, .draft-view summary {
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--green);
+    }
+    .markdown .math, .draft-view .math {
+      font-family: "Times New Roman", Georgia, serif;
+      white-space: nowrap;
+    }
+    .markdown .caption, .draft-view .caption {
+      margin: 16px 0 8px;
+      font-weight: 700;
+      color: #4d3923;
+    }
+    .markdown .raw-block, .draft-view .raw-block { margin: 12px 0; }
+    .editor {
+      width: 100%;
+      min-height: 240px;
+      resize: vertical;
+      border: 0;
+      outline: none;
+      padding: 14px;
+      background: #181d1a;
+      color: #e8f4ea;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .side-body { padding: 12px; }
+    .field { margin-bottom: 12px; }
+    .label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 4px;
+    }
+    .value { font-size: 14px; line-height: 1.35; }
+    .message {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      padding: 11px 15px;
+      border-radius: 12px;
+      background: #15251f;
+      color: white;
+      box-shadow: var(--shadow);
+      display: none;
+      max-width: 420px;
+    }
+    .message.show { display: block; }
+  </style>
+  <link rel="stylesheet" href="/assets/dashboard/review-ui.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-title">ChemVellum Dashboard</div>
+    <div class="nav-center">
+      <select id="projectSelect" class="project-select"></select>
+    </div>
+    <div class="nav-right">
+      <a href="/library">Library</a>
+      <a href="/discovery">Discovery</a>
+      <a href="/matrix">Matrix</a>
+      <a href="/blueprint">Blueprint</a>
+      <a href="/sections">Sections</a>
+      <a href="/figures">Figures</a>
+      <a class="active" href="/draft">Draft</a>
+      <a href="/final">Final</a>
+    </div>
+  </nav>
+  <main class="app">
+    <section class="panel">
+      <div class="head">
+        <h1>Project Draft</h1>
+        <div id="projectInfo" class="sub">Loading project...</div>
+      </div>
+      <div class="toolbar">
+        <button class="btn" id="reloadBtn">Reload</button>
+        <button class="btn primary" id="saveBtn">Save Draft</button>
+      </div>
+      <div id="leftList" class="list"></div>
+    </section>
+    <section class="panel">
+      <div class="head">
+        <h2 id="detailTitle">Draft Preview</h2>
+        <div id="detailMeta" class="sub"></div>
+      </div>
+      <div class="tabs">
+        <button class="tab active" data-tab="preview">Preview</button>
+        <button class="tab" data-tab="edit">Edit</button>
+        <button class="tab" data-tab="report">Merge Report</button>
+        <button class="tab" data-tab="issues">Issues</button>
+      </div>
+      <div class="detail-body">
+        <div id="preview" class="draft-view"></div>
+        <div id="edit" style="display:none; height:100%">
+          <textarea id="draftEditor" class="editor" spellcheck="false"></textarea>
+        </div>
+        <div id="report" class="markdown" style="display:none"></div>
+        <div id="issues" class="markdown" style="display:none"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="head">
+        <h2>Project Status</h2>
+        <div class="sub">Same project across discovery, drafting, redraw, and merge.</div>
+      </div>
+      <div class="side-body">
+        <div id="summaryBox"></div>
+      </div>
+    </section>
+  </main>
+  <div id="message" class="message"></div>
+  <script src="/assets/dashboard/review-ui.js"></script>
+  <script>
+    let projects = [];
+    let selectedProject = '';
+    let payload = null;
+    let selectedItem = 'first_draft';
+    const els = {
+      projectSelect: document.getElementById('projectSelect'),
+      projectInfo: document.getElementById('projectInfo'),
+      leftList: document.getElementById('leftList'),
+      detailTitle: document.getElementById('detailTitle'),
+      detailMeta: document.getElementById('detailMeta'),
+      preview: document.getElementById('preview'),
+      draftEditor: document.getElementById('draftEditor'),
+      report: document.getElementById('report'),
+      issues: document.getElementById('issues'),
+      summaryBox: document.getElementById('summaryBox'),
+      message: document.getElementById('message')
+    };
+    function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
+    function msg(text) { els.message.textContent = text; els.message.classList.add('show'); setTimeout(() => els.message.classList.remove('show'), 2600); }
+    function simpleMathToHtml(expr) {
+      let s = String(expr ?? '');
+      s = s.replace(/\\mathrm\s*\{\s*([^{}]+?)\s*\}/g, '$1');
+      s = s.replace(/\\prime/g, '′');
+      s = s.replace(/\\[a-zA-Z]+/g, '');
+      s = s.replace(/\s+/g, ' ').trim();
+      s = esc(s);
+      s = s.replace(/_\s*\{\s*([^{}]+?)\s*\}/g, '<sub>$1</sub>');
+      s = s.replace(/\^\s*\{\s*([^{}]+?)\s*\}/g, '<sup>$1</sup>');
+      s = s.replace(/_([A-Za-z0-9′+-]+)/g, '<sub>$1</sub>');
+      s = s.replace(/\^([A-Za-z0-9′+-]+)/g, '<sup>$1</sup>');
+      return `<span class="math">${s}</span>`;
+    }
+    function renderInline(text) {
+      const parts = String(text ?? '').split(/(\$[^$\n]+\$)/g);
+      return parts.map(part => {
+        if (part.startsWith('$') && part.endsWith('$')) return simpleMathToHtml(part.slice(1, -1));
+        let s = esc(part);
+        s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+        s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+        s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, href) => {
+          if (/^https?:\/\//i.test(href)) return `<a href="${esc(href)}" target="_blank" rel="noopener">${label}</a>`;
+          return m;
+        });
+        return s;
+      }).join('');
+    }
+    function sanitizeAllowedHtml(raw) {
+      const allowedTags = new Set(['DIV','DETAILS','SUMMARY','TABLE','THEAD','TBODY','TFOOT','TR','TH','TD','CAPTION','P','BR','B','STRONG','I','EM','SUB','SUP','SPAN','IMG']);
+      const template = document.createElement('template');
+      template.innerHTML = raw;
+      const walk = node => {
+        if (node.nodeType === Node.TEXT_NODE) {
+          const span = document.createElement('span');
+          span.innerHTML = renderInline(node.textContent || '');
+          node.replaceWith(...Array.from(span.childNodes));
+          return;
+        }
+        if (node.nodeType !== Node.ELEMENT_NODE) return;
+        if (!allowedTags.has(node.tagName)) {
+          node.replaceWith(document.createTextNode(node.textContent || ''));
+          return;
+        }
+        [...node.attributes].forEach(attr => {
+          const name = attr.name.toLowerCase();
+          if (!['colspan', 'rowspan', 'open', 'class', 'src', 'alt'].includes(name)) node.removeAttribute(attr.name);
+          if (name === 'src' && !String(attr.value || '').startsWith('/file?')) node.removeAttribute(attr.name);
+        });
+        [...node.childNodes].forEach(walk);
+      };
+      [...template.content.childNodes].forEach(walk);
+      return template.innerHTML;
+    }
+    function fileUrlForMarkdownPath(path, baseDir = '') {
+      const raw = String(path || '').trim();
+      if (!raw) return '';
+      if (/^https?:\/\//i.test(raw)) return raw;
+      if (raw.startsWith('/')) return `/file?path=${encodeURIComponent(raw)}`;
+      const base = String(baseDir || payload?.paths?.first_draft_base_dir || payload?.paths?.stage_dir || '').replace(/\/+$/, '');
+      return `/file?path=${encodeURIComponent(base ? `${base}/${raw}` : raw)}`;
+    }
+    function renderMarkdown(md, baseDir = '') {
+      const blocks = [];
+      const stash = html => {
+        const key = `@@HTML_BLOCK_${blocks.length}@@`;
+        blocks.push(sanitizeAllowedHtml(html));
+        return key;
+      };
+      let text = String(md ?? '');
+      text = text.replace(/<details[\s\S]*?<\/details>/gi, match => stash(`<div class="raw-block">${match}</div>`));
+      text = text.replace(/<table[\s\S]*?<\/table>/gi, match => stash(match));
+      text = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_, alt, path) => {
+        const src = fileUrlForMarkdownPath(path, baseDir);
+        return stash(`<img alt="${esc(alt)}" src="${src}">`);
+      });
+      const html = text.split(/\n{2,}/).map(rawBlock => {
+        const block = rawBlock.trim();
+        if (!block) return '';
+        const marker = block.match(/^@@HTML_BLOCK_(\d+)@@$/);
+        if (marker) return blocks[Number(marker[1])] || '';
+        let m = block.match(/^###\s+(.+)$/);
+        if (m) return `<h3>${renderInline(m[1])}</h3>`;
+        m = block.match(/^##\s+(.+)$/);
+        if (m) return `<h2>${renderInline(m[1])}</h2>`;
+        m = block.match(/^#\s+(.+)$/);
+        if (m) return `<h1>${renderInline(m[1])}</h1>`;
+        if (/^(Scheme|Table|Figure)\s+\d+/i.test(block)) return `<div class="caption">${renderInline(block).replace(/\n/g, '<br>')}</div>`;
+        return `<p>${renderInline(block).replace(/\n/g, '<br>')}</p>`;
+      }).join('\n');
+      return html.replace(/@@HTML_BLOCK_(\d+)@@/g, (_, i) => blocks[Number(i)] || '');
+    }
+    async function loadProjects() {
+      projects = await (await fetch('/api/projects')).json();
+      els.projectSelect.innerHTML = projects.map(p => `<option value="${esc(p.project_id)}">${esc(p.project_id)}</option>`).join('');
+      if (projects.length) {
+        selectedProject = projects[0].project_id;
+        els.projectSelect.value = selectedProject;
+        await loadProject(selectedProject);
+      } else {
+        els.projectInfo.textContent = 'No review projects found.';
+      }
+    }
+    async function loadProject(projectId) {
+      selectedProject = projectId;
+      payload = await (await fetch(`/api/project/${encodeURIComponent(projectId)}/draft`)).json();
+      els.draftEditor.value = payload.first_draft_md || '';
+      renderLeft();
+      renderSummary();
+      renderCurrent();
+    }
+    function renderLeft() {
+      const items = [
+        {id:'first_draft', title:'First Draft', meta:'Unified manuscript preview and editable source'},
+        {id:'merge_report', title:'Merge Report', meta:'Section merge notes and normalization report'},
+        {id:'remaining_issues', title:'Remaining Issues', meta:'Open risks that still need human check'}
+      ];
+      els.leftList.innerHTML = items.map(item => `
+        <button class="item ${selectedItem===item.id?'active':''}" data-id="${item.id}">
+          <div class="item-title">${esc(item.title)}</div>
+          <div class="item-meta">${esc(item.meta)}</div>
+          ${item.id==='first_draft' && payload?.summary?.has_figure_redraw ? '<span class="pill">figures ready</span>' : ''}
+        </button>
+      `).join('');
+      els.projectInfo.textContent = `${selectedProject} · ${payload?.topic || ''}`;
+    }
+    function renderSummary() {
+      const s = payload?.summary || {};
+      const redrawn = payload?.redrawn_figures || [];
+      els.summaryBox.innerHTML = `
+        <div class="field"><div class="label">Project</div><div class="value">${esc(selectedProject)}</div></div>
+        <div class="field"><div class="label">Topic</div><div class="value">${esc(payload?.topic || '')}</div></div>
+        <div class="field"><div class="label">Stage Status</div><div class="value">
+          <span class="pill">discovery=${esc(s.discovery_status || 'pending')}</span>
+          <span class="pill">matrix=${esc(Boolean(s.has_matrix_outline))}</span>
+          <span class="pill">sections=${esc(Boolean(s.has_section_drafting))}</span>
+          <span class="pill">redraw=${esc(Boolean(s.has_figure_redraw))}</span>
+          <span class="pill">draft=${esc(Boolean(s.has_first_draft))}</span>
+        </div></div>
+        <div class="field"><div class="label">Redrawn Figures</div><div class="value">${esc(redrawn.length)}</div></div>
+        <div class="field"><div class="label">Draft Files</div><div class="value">${esc(payload?.paths?.stage_dir || '')}</div></div>
+      `;
+    }
+    function renderCurrent() {
+      if (selectedItem === 'first_draft') {
+        els.detailTitle.textContent = 'First Draft';
+        els.detailMeta.textContent = 'Unified manuscript preview for the selected project.';
+        els.preview.innerHTML = renderMarkdown(els.draftEditor.value || '', payload?.paths?.first_draft_base_dir || payload?.paths?.stage_dir || '');
+        els.report.innerHTML = renderMarkdown(payload?.merge_report_md || '', payload?.paths?.stage_dir || '');
+        els.issues.innerHTML = renderMarkdown(payload?.remaining_issues_md || '', payload?.paths?.stage_dir || '');
+      } else if (selectedItem === 'merge_report') {
+        els.detailTitle.textContent = 'Merge Report';
+        els.detailMeta.textContent = 'Section merge and normalization notes.';
+        els.report.innerHTML = renderMarkdown(payload?.merge_report_md || '', payload?.paths?.stage_dir || '');
+      } else {
+        els.detailTitle.textContent = 'Remaining Issues';
+        els.detailMeta.textContent = 'Open issues requiring review.';
+        els.issues.innerHTML = renderMarkdown(payload?.remaining_issues_md || '', payload?.paths?.stage_dir || '');
+      }
+    }
+    async function saveDraft() {
+      if (!selectedProject) return;
+      const res = await fetch(`/api/project/${encodeURIComponent(selectedProject)}/draft`, {
+        method: 'PUT',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({
+          first_draft_md: els.draftEditor.value,
+          merge_report_md: payload?.merge_report_md || '',
+          remaining_issues_md: payload?.remaining_issues_md || '',
+          draft_bundle: payload?.draft_bundle || {}
+        })
+      });
+      if (!res.ok) { msg(await res.text()); return; }
+      msg('Draft saved');
+      await loadProject(selectedProject);
+    }
+    document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const map = {preview:'preview', edit:'edit', report:'report', issues:'issues'};
+      for (const id of Object.values(map)) document.getElementById(id).style.display = 'none';
+      document.getElementById(map[tab.dataset.tab]).style.display = 'block';
+      renderCurrent();
+    }));
+    els.leftList.addEventListener('click', e => {
+      const item = e.target.closest('[data-id]');
+      if (!item) return;
+      selectedItem = item.dataset.id;
+      renderLeft();
+      renderCurrent();
+    });
+    els.projectSelect.addEventListener('change', e => loadProject(e.target.value));
+    document.getElementById('reloadBtn').addEventListener('click', () => selectedProject && loadProject(selectedProject));
+    document.getElementById('saveBtn').addEventListener('click', saveDraft);
+    loadProjects().catch(err => msg(err.message));
+  </script>
+</body>
+</html>

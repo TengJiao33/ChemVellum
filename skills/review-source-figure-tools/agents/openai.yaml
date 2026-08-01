@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Source Figure Tools"
+  short_description: "Browse source-paper visuals and record provenance."
+  default_prompt: "Use $review-source-figure-tools to browse source-paper visuals by paper and source order, inspect the real page, and record provenance for only the assets worth inserting."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Topic Paper Discovery"
+  short_description: "Find, acquire, parse, and register lawful full text."
+  default_prompt: "Use $review-topic-paper-discovery to search local and external sources, acquire lawful full text, run MinerU when needed, and add useful papers to the managed library."

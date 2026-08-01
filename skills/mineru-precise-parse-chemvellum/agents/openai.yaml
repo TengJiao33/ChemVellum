@@ -1,0 +1,6 @@
+interface:
+  display_name: "MinerU Precise Parse"
+  short_description: "Batch-parse local PDFs with MinerU"
+  default_prompt: "Use $mineru-precise-parse-chemvellum to batch-convert local review PDFs into Markdown with MinerU precise parsing."
+policy:
+  allow_implicit_invocation: true

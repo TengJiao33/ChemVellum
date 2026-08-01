@@ -1,0 +1,4 @@
+interface:
+  display_name: "Review Metadata Prep"
+  short_description: "Register full text and maintain bibliographic metadata."
+  default_prompt: "Use $review-metadata-prep to register parsed papers, extract bibliographic metadata, and report missing or stale source fields for repair from reliable records."

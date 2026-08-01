@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review Discovery Dashboard</title>
+  <style>
+    :root {
+      --ink: #1b241f;
+      --muted: #69756f;
+      --paper: #f5efe2;
+      --panel: #fffaf0;
+      --line: #dacdb8;
+      --green: #1f6b55;
+      --orange: #bd6b35;
+      --red: #9f3b36;
+      --blue: #355f8a;
+      --shadow: 0 18px 46px rgba(55, 43, 24, .14);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(31,107,85,.16), transparent 24rem),
+        radial-gradient(circle at 84% 16%, rgba(189,107,53,.16), transparent 28rem),
+        linear-gradient(135deg, #f1e7d3, #fbf7ec 48%, #eadcc4);
+      font-family: Georgia, "Times New Roman", serif;
+      height: 100vh;
+      overflow: hidden;
+    }
+    button, input, select, textarea { font: inherit; }
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 300px 420px minmax(520px, 1fr);
+      gap: 14px;
+      padding: 14px;
+    }
+    .panel {
+      background: rgba(255,250,240,.94);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .head {
+      padding: 16px;
+      border-bottom: 1px solid var(--line);
+    }
+    h1, h2, h3 { margin: 0; letter-spacing: -.02em; }
+    h1 { font-size: 23px; }
+    h2 { font-size: 18px; }
+    .sub { margin-top: 6px; color: var(--muted); font-size: 13px; line-height: 1.35; }
+    .toolbar { padding: 10px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; flex-wrap: wrap; }
+    input, select {
+      border: 1px solid var(--line);
+      background: #fffdf7;
+      border-radius: 999px;
+      padding: 8px 11px;
+      outline: none;
+      min-width: 0;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      background: #fffdf7;
+      border-radius: 999px;
+      padding: 8px 11px;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .btn.primary { background: var(--green); border-color: var(--green); color: white; }
+    .btn.orange { background: var(--orange); border-color: var(--orange); color: white; }
+    .btn.red { background: var(--red); border-color: var(--red); color: white; }
+    .list { overflow: auto; padding: 9px; }
+    .card {
+      width: 100%;
+      text-align: left;
+      border: 1px solid transparent;
+      border-radius: 14px;
+      padding: 11px;
+      margin-bottom: 8px;
+      background: #fffdf7;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .card:hover, .card.active { border-color: var(--green); background: #f2faf0; }
+    .card.deleted { opacity: .45; background: #f5eadf; }
+    .k-title { font-weight: 700; font-size: 15px; }
+    .meta { color: var(--muted); font-size: 12px; margin-top: 5px; }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      background: #e4efe4;
+      color: #285a37;
+      margin: 5px 4px 0 0;
+    }
+    .pill.web { background: #e4ebf4; color: #254c74; }
+    .pill.del { background: #f0d9cf; color: #7f332b; }
+    .results { overflow: auto; padding: 10px; }
+    .result {
+      border: 1px solid var(--line);
+      background: #fffdf7;
+      border-radius: 16px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    .result.drop { opacity: .4; }
+    .r-title { font-size: 15px; line-height: 1.25; font-weight: 700; }
+    .r-actions { margin-top: 10px; display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
+    .r-actions select { max-width: 190px; }
+    .detail-tabs { display: flex; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line); }
+    .tab { border: 1px solid var(--line); border-radius: 999px; padding: 8px 12px; background: #fffdf7; cursor: pointer; }
+    .tab.active { background: var(--green); color: white; border-color: var(--green); }
+    .detail-body { flex: 1; min-height: 0; overflow: auto; background: #fffdf7; }
+    iframe { width: 100%; height: 100%; border: 0; background: white; }
+    pre {
+      margin: 0;
+      padding: 16px;
+      white-space: pre-wrap;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .summary {
+      padding: 16px;
+      line-height: 1.45;
+    }
+    .message {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      max-width: 480px;
+      background: #17241f;
+      color: white;
+      padding: 12px 15px;
+      border-radius: 13px;
+      box-shadow: var(--shadow);
+      display: none;
+    }
+    .message.show { display: block; }
+    @media (max-width: 1180px) {
+      body { overflow: auto; height: auto; }
+      .app { height: auto; grid-template-columns: 1fr; }
+      .panel { min-height: 460px; }
+    }
+  </style>
+</head>
+<body>
+<main class="app">
+  <section class="panel">
+    <div class="head">
+      <h1>Discovery Check</h1>
+      <div id="projectInfo" class="sub">Loading project...</div>
+    </div>
+    <div class="toolbar">
+      <select id="projectSelect"></select>
+      <button class="btn" id="reloadBtn">Reload</button>
+      <button class="btn primary" id="saveBtn">Save</button>
+      <button class="btn orange" id="confirmBtn">Confirm</button>
+    </div>
+    <div class="toolbar">
+      <input id="keywordFilter" placeholder="Filter keywords">
+    </div>
+    <div id="keywordList" class="list"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head">
+      <h2 id="keywordTitle">Keyword Results</h2>
+      <div id="keywordMeta" class="sub"></div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="toggleKeywordBtn">Toggle keyword keep</button>
+    </div>
+    <div id="results" class="results"></div>
+  </section>
+
+  <section class="panel">
+    <div class="head">
+      <h2 id="detailTitle">Paper Detail</h2>
+      <div id="detailMeta" class="sub"></div>
+    </div>
+    <div class="detail-tabs">
+      <button class="tab active" data-tab="summary">Summary</button>
+      <button class="tab" data-tab="pdf">PDF</button>
+      <button class="tab" data-tab="markdown">Markdown</button>
+      <button class="tab" data-tab="metadata">Metadata</button>
+    </div>
+    <div class="detail-body">
+      <div id="summary" class="summary"></div>
+      <iframe id="pdfFrame" style="display:none"></iframe>
+      <pre id="markdown" style="display:none"></pre>
+      <pre id="metadata" style="display:none"></pre>
+    </div>
+  </section>
+</main>
+<div id="message" class="message"></div>
+
+<script>
+let projects = [];
+let currentProject = null;
+let data = null;
+let selectedKeyword = null;
+let selectedPaper = null;
+
+const els = {
+  projectInfo: document.getElementById('projectInfo'),
+  projectSelect: document.getElementById('projectSelect'),
+  reloadBtn: document.getElementById('reloadBtn'),
+  saveBtn: document.getElementById('saveBtn'),
+  confirmBtn: document.getElementById('confirmBtn'),
+  keywordFilter: document.getElementById('keywordFilter'),
+  keywordList: document.getElementById('keywordList'),
+  keywordTitle: document.getElementById('keywordTitle'),
+  keywordMeta: document.getElementById('keywordMeta'),
+  toggleKeywordBtn: document.getElementById('toggleKeywordBtn'),
+  results: document.getElementById('results'),
+  detailTitle: document.getElementById('detailTitle'),
+  detailMeta: document.getElementById('detailMeta'),
+  summary: document.getElementById('summary'),
+  pdfFrame: document.getElementById('pdfFrame'),
+  markdown: document.getElementById('markdown'),
+  metadata: document.getElementById('metadata'),
+  message: document.getElementById('message')
+};
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+}
+function msg(text) {
+  els.message.textContent = text;
+  els.message.classList.add('show');
+  setTimeout(() => els.message.classList.remove('show'), 2600);
+}
+async function loadProjects() {
+  projects = await (await fetch('/api/projects')).json();
+  els.projectSelect.innerHTML = projects.map(p => `<option value="${escapeHtml(p.project_id)}">${escapeHtml(p.project_id)}</option>`).join('');
+  if (projects.length) {
+    currentProject = projects[0].project_id;
+    els.projectSelect.value = currentProject;
+    await loadProject(currentProject);
+  }
+}
+async function loadProject(projectId) {
+  currentProject = projectId;
+  data = await (await fetch(`/api/discovery/${encodeURIComponent(projectId)}`)).json();
+  selectedKeyword = data.results.find(g => g.keep !== false)?.keyword || data.results[0]?.keyword;
+  selectedPaper = null;
+  renderAll();
+}
+function renderAll() {
+  els.projectInfo.textContent = `${currentProject} · ${data.topic || ''}`;
+  renderKeywords();
+  renderResults();
+  renderDetail();
+}
+function renderKeywords() {
+  const q = els.keywordFilter.value.toLowerCase();
+  const groups = data.results.filter(g => g.keyword.toLowerCase().includes(q));
+  els.keywordList.innerHTML = groups.map(g => {
+    const local = (g.local_results || []).filter(r => r.keep !== false).length;
+    const web = (g.web_results || []).filter(r => r.keep !== false).length;
+    return `<button class="card ${selectedKeyword === g.keyword ? 'active' : ''} ${g.keep === false ? 'deleted' : ''}" data-keyword="${escapeHtml(g.keyword)}">
+      <div class="k-title">${escapeHtml(g.keyword)}</div>
+      <div class="meta">${escapeHtml(g.category || '')}</div>
+      <span class="pill">${local} local</span><span class="pill web">${web} web</span>${g.keep === false ? '<span class="pill del">deleted</span>' : ''}
+    </button>`;
+  }).join('');
+}
+function currentGroup() {
+  return data?.results?.find(g => g.keyword === selectedKeyword);
+}
+function renderResults() {
+  const g = currentGroup();
+  if (!g) { els.results.innerHTML = ''; return; }
+  els.keywordTitle.textContent = g.keyword;
+  els.keywordMeta.textContent = `${g.category || ''} · keep=${g.keep !== false}`;
+  const local = (g.local_results || []).map(r => ({...r, kind:'local'}));
+  const web = (g.web_results || []).map(r => ({...r, kind:'web'}));
+  const rows = [...local, ...web];
+  els.results.innerHTML = rows.map((r, idx) => {
+    const id = r.kind === 'local' ? r.paper_id : `web-${idx}`;
+    const active = selectedPaper && selectedPaper.id === id ? 'active' : '';
+    const role = r.role || 'web_candidate';
+    const link = r.kind === 'web' && r.url ? `<a href="${escapeHtml(r.url)}" target="_blank">Open link</a>` : '';
+    return `<div class="result ${r.keep === false ? 'drop' : ''} ${active}" data-kind="${r.kind}" data-id="${escapeHtml(id)}" data-index="${idx}">
+      <div class="r-title">${escapeHtml(r.title || '(untitled)')}</div>
+      <div class="meta">${escapeHtml([r.paper_id, r.year, r.journal, `score=${r.score}`].filter(Boolean).join(' · '))}</div>
+      <div class="meta">${escapeHtml(r.reason || '')} ${link}</div>
+      <div class="r-actions">
+        <button class="btn ${r.keep === false ? 'primary' : 'red'}" data-action="toggle" data-kind="${r.kind}" data-id="${escapeHtml(id)}" data-index="${idx}">${r.keep === false ? 'Restore' : 'Delete'}</button>
+        ${r.kind === 'local' ? `<select data-action="role" data-id="${escapeHtml(id)}">${['core_candidate','supporting_candidate','background','uncertain','excluded'].map(opt => `<option ${role===opt?'selected':''}>${opt}</option>`).join('')}</select>` : ''}
+        <button class="btn" data-action="detail" data-kind="${r.kind}" data-id="${escapeHtml(id)}" data-index="${idx}">View</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function renderDetail() {
+  if (!selectedPaper) {
+    els.detailTitle.textContent = 'Paper Detail';
+    els.detailMeta.textContent = 'Select a paper result.';
+    els.summary.innerHTML = '<p>Select a local or web paper to inspect.</p>';
+    els.markdown.textContent = '';
+    els.metadata.textContent = '';
+    els.pdfFrame.src = 'about:blank';
+    return;
+  }
+  const r = selectedPaper.row;
+  els.detailTitle.textContent = r.title || '(untitled)';
+  els.detailMeta.textContent = selectedPaper.kind === 'local' ? `${r.paper_id} · ${r.year || ''} · ${r.journal || ''}` : `${r.year || ''} · ${r.journal || ''}`;
+  els.summary.innerHTML = `
+    <h3>${escapeHtml(r.title)}</h3>
+    <p><strong>Score:</strong> ${escapeHtml(r.score)}</p>
+    <p><strong>Reason:</strong> ${escapeHtml(r.reason || '')}</p>
+    <p><strong>Role:</strong> ${escapeHtml(r.role || 'web_candidate')}</p>
+    ${r.url ? `<p><a href="${escapeHtml(r.url)}" target="_blank">Open web result</a></p>` : ''}
+  `;
+  if (selectedPaper.kind === 'local') {
+    const meta = await (await fetch(`/api/local/metadata/${encodeURIComponent(r.paper_id)}`)).json();
+    els.metadata.textContent = JSON.stringify(meta, null, 2);
+    els.markdown.textContent = await (await fetch(`/api/local/markdown/${encodeURIComponent(r.paper_id)}`)).text();
+    const pdf = meta.source_paths?.pdf;
+    els.pdfFrame.src = pdf ? `/file?path=${encodeURIComponent(pdf)}` : 'about:blank';
+  } else {
+    els.metadata.textContent = JSON.stringify(r, null, 2);
+    els.markdown.textContent = 'No local Markdown for web result.';
+    els.pdfFrame.src = 'about:blank';
+  }
+}
+function findRow(kind, id, index) {
+  const g = currentGroup();
+  const arr = kind === 'local' ? g.local_results : g.web_results;
+  if (kind === 'local') return arr.find(r => r.paper_id === id);
+  return arr[Number(index)];
+}
+async function save(confirm=false) {
+  const res = await fetch(`/api/discovery/${encodeURIComponent(currentProject)}${confirm ? '?confirm=1' : ''}`, {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(data)
+  });
+  if (!res.ok) { msg(await res.text()); return; }
+  msg(confirm ? 'Discovery confirmed and saved' : 'Saved');
+  await loadProject(currentProject);
+}
+document.addEventListener('click', async e => {
+  const kw = e.target.closest('[data-keyword]');
+  if (kw) { selectedKeyword = kw.dataset.keyword; selectedPaper = null; renderAll(); return; }
+  const actionEl = e.target.closest('[data-action]');
+  if (actionEl) {
+    const action = actionEl.dataset.action;
+    const id = actionEl.dataset.id;
+    const kind = actionEl.dataset.kind;
+    const index = actionEl.dataset.index;
+    const row = findRow(kind, id, index);
+    if (action === 'toggle') row.keep = row.keep === false;
+    if (action === 'detail') selectedPaper = {kind, id, row};
+    renderResults(); await renderDetail();
+  }
+});
+els.results.addEventListener('change', e => {
+  const sel = e.target.closest('select[data-action="role"]');
+  if (!sel) return;
+  const row = findRow('local', sel.dataset.id, 0);
+  row.role = sel.value;
+});
+document.querySelectorAll('.tab').forEach(tab => tab.addEventListener('click', () => {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tab.classList.add('active');
+  for (const id of ['summary','pdfFrame','markdown','metadata']) document.getElementById(id).style.display = 'none';
+  const map = {summary:'summary', pdf:'pdfFrame', markdown:'markdown', metadata:'metadata'};
+  document.getElementById(map[tab.dataset.tab]).style.display = 'block';
+}));
+els.projectSelect.addEventListener('change', e => loadProject(e.target.value));
+els.reloadBtn.addEventListener('click', () => loadProject(currentProject));
+els.saveBtn.addEventListener('click', () => save(false));
+els.confirmBtn.addEventListener('click', () => save(true));
+els.keywordFilter.addEventListener('input', renderKeywords);
+els.toggleKeywordBtn.addEventListener('click', () => {
+  const g = currentGroup();
+  if (g) { g.keep = g.keep === false; renderAll(); }
+});
+loadProjects().catch(err => msg(err.message));
+</script>
+</body>
+</html>

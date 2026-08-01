@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Review Matrix Outline</title>
+  <style>
+    :root { --ink:#1d241f; --muted:#69756d; --line:#dacdb8; --panel:#fffaf0; --green:#1f6b55; --orange:#bd6b35; --shadow:0 18px 46px rgba(55,43,24,.14); }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:linear-gradient(135deg,#f1e7d3,#fbf7ec 48%,#eadcc4); font-family:Georgia,"Times New Roman",serif; height:100vh; overflow:hidden; }
+    button,select,input { font:inherit; }
+    .nav { height:58px; padding:8px 14px; display:flex; align-items:center; justify-content:space-between; gap:10px; background:rgba(255,250,240,.94); border-bottom:1px solid var(--line); }
+    .nav-title { font-weight:700; font-size:18px; white-space:nowrap; }
+    .nav-center { flex:1; text-align:center; }
+    .project-select { min-width:280px; max-width:520px; border:1px solid var(--line); background:#fffdf7; border-radius:999px; padding:8px 12px; }
+    .nav-right { display:flex; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
+    .nav a { text-decoration:none; color:var(--ink); border:1px solid var(--line); border-radius:999px; padding:7px 10px; background:#fffdf7; white-space:nowrap; font-size:14px; }
+    .nav a.active { background:var(--green); border-color:var(--green); color:white; }
+    .app { height:calc(100vh - 58px); display:grid; grid-template-columns:320px minmax(520px,1fr) 390px; gap:14px; padding:14px; }
+    .panel { background:rgba(255,250,240,.94); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow); overflow:hidden; min-height:0; display:flex; flex-direction:column; }
+    .head,.toolbar { padding:14px; border-bottom:1px solid var(--line); }
+    h1,h2,h3 { margin:0; letter-spacing:-.02em; }
+    h1 { font-size:22px; } h2 { font-size:18px; }
+    .sub { margin-top:6px; color:var(--muted); font-size:13px; line-height:1.35; }
+    .toolbar { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    input { border:1px solid var(--line); background:#fffdf7; border-radius:999px; padding:8px 11px; width:100%; }
+    .list,.main,.side { overflow:auto; min-height:0; }
+    .list { padding:9px; }
+    .card { width:100%; text-align:left; border:1px solid transparent; background:#fffdf7; border-radius:12px; padding:10px; margin-bottom:8px; cursor:pointer; color:var(--ink); }
+    .card:hover,.card.active { border-color:var(--green); background:#f2faf0; }
+    .title { font-weight:700; font-size:14px; line-height:1.25; }
+    .meta { color:var(--muted); font-size:12px; margin-top:5px; line-height:1.35; }
+    .pill { display:inline-block; font-size:11px; padding:3px 7px; border-radius:999px; background:#e4efe4; color:#285a37; margin:5px 4px 0 0; }
+    .main { background:#fffdf7; padding:24px 30px; line-height:1.58; font-size:15px; }
+    .field { margin-bottom:14px; }
+    .label { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; margin-bottom:4px; }
+    .value { line-height:1.45; white-space:pre-wrap; }
+    .tabs { padding:10px; border-bottom:1px solid var(--line); display:flex; gap:8px; flex-wrap:wrap; }
+    .tab { border:1px solid var(--line); border-radius:999px; background:#fffdf7; padding:7px 10px; cursor:pointer; }
+    .tab.active { background:var(--green); color:white; border-color:var(--green); }
+    table { border-collapse:collapse; width:100%; font-size:13px; background:white; }
+    td,th { border:1px solid #d5c8b3; padding:7px; vertical-align:top; }
+    th { background:#efe6d4; }
+    pre { white-space:pre-wrap; margin:0; font-family:Consolas,monospace; font-size:12px; }
+    .side { padding:14px; }
+  </style>
+  <link rel="stylesheet" href="/assets/dashboard/review-ui.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-title">ChemVellum</div>
+    <div class="nav-center"><select id="projectSelect" class="project-select"></select></div>
+    <div class="nav-right">
+      <a href="/library">Library</a><a href="/discovery">Discovery</a><a class="active" href="/matrix">Matrix</a><a href="/blueprint">Blueprint</a><a href="/sections">Sections</a><a href="/figures">Figures</a><a href="/draft">Draft</a><a href="/final">Final</a>
+    </div>
+  </nav>
+  <main class="app">
+    <section class="panel">
+      <div class="head"><h1>Literature Matrix</h1><div id="projectInfo" class="sub">Loading...</div></div>
+      <div class="toolbar"><input id="filter" placeholder="Filter paper/title/tag"></div>
+      <div id="paperList" class="list"></div>
+    </section>
+    <section class="panel">
+      <div class="head"><h2 id="mainTitle">Paper Detail</h2><div id="mainMeta" class="sub"></div></div>
+      <div class="tabs">
+        <button class="tab active" data-tab="paper">Paper</button>
+        <button class="tab" data-tab="outline">Outline Options</button>
+        <button class="tab" data-tab="selected">Selected Outline</button>
+        <button class="tab" data-tab="report">Report</button>
+      </div>
+      <div id="main" class="main"></div>
+    </section>
+    <section class="panel">
+      <div class="head"><h2>Review Gate</h2><div class="sub">Check whether every selected paper has enough evidence for outline planning.</div></div>
+      <div id="summary" class="side"></div>
+    </section>
+  </main>
+  <script src="/assets/dashboard/review-ui.js"></script>
+  <script>
+    let projects=[], selectedProject='', payload=null, selectedPaper='', tab='paper';
+    const $=id=>document.getElementById(id);
+    const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+    const val=x=>x&&typeof x==='object'&&'value'in x?x.value:x;
+    const papers=()=>Array.isArray(payload?.literature_matrix)?payload.literature_matrix:(payload?.literature_matrix?.papers||[]);
+    function md(s){ return String(s||'').split(/\n{2,}/).map(b=>{b=b.trim(); if(!b)return''; let m=b.match(/^###\s+(.+)/); if(m)return`<h3>${esc(m[1])}</h3>`; m=b.match(/^##\s+(.+)/); if(m)return`<h2>${esc(m[1])}</h2>`; m=b.match(/^#\s+(.+)/); if(m)return`<h1>${esc(m[1])}</h1>`; return`<p>${esc(b).replace(/\n/g,'<br>')}</p>`;}).join(''); }
+    async function loadProjects(){ projects=await(await fetch('/api/projects')).json(); $('projectSelect').innerHTML=projects.map(p=>`<option value="${esc(p.project_id)}">${esc(p.project_id)}</option>`).join(''); if(projects[0]) loadProject(projects[0].project_id); }
+    async function loadProject(id){ selectedProject=id; payload=await(await fetch(`/api/project/${encodeURIComponent(id)}/matrix`)).json(); selectedPaper=(papers()[0]||{}).paper_id||''; render(); }
+    function renderList(){ const q=$('filter').value.toLowerCase(); const rows=papers().filter(p=>[p.paper_id,p.title,p.keywords,p.abstract].join(' ').toLowerCase().includes(q)); $('paperList').innerHTML=rows.map(p=>`<button class="card ${p.paper_id===selectedPaper?'active':''}" data-id="${esc(p.paper_id)}"><div class="title">${esc(p.paper_id)} · ${esc(p.title||'(untitled)')}</div><div class="meta">${esc((p.authors||[]).join(', '))}</div>${(p.keywords||[]).map(k=>`<span class="pill">${esc(k)}</span>`).join('')}</button>`).join('')||'<div class="empty">No matrix rows match the current filter.</div>'; }
+    function renderPaper(){ const p=papers().find(x=>x.paper_id===selectedPaper)||{}; $('mainTitle').textContent=p.paper_id?`${p.paper_id} Matrix Row`:'Paper Detail'; $('mainMeta').textContent=p.title||''; $('main').innerHTML=['title','authors','keywords','abstract','main_content','most_relevant_figure'].map(k=>`<div class="field"><div class="label">${k}</div><div class="value">${esc(Array.isArray(p[k])?p[k].join(', '):(typeof p[k]==='object'?JSON.stringify(p[k],null,2):p[k]||''))}</div></div>`).join(''); }
+    function renderMain(){ if(tab==='paper') renderPaper(); else if(tab==='outline') $('main').innerHTML=md(payload?.outline_options_md); else if(tab==='selected') $('main').innerHTML=md(payload?.selected_outline_md||'No selected_outline.md yet.'); else $('main').innerHTML=md(payload?.matrix_outline_report_md); }
+    function renderSummary(){ const rows=papers(); const required=['title','authors','keywords','abstract','main_content','most_relevant_figure']; const missing=rows.filter(p=>required.some(k=>!p[k]||(Array.isArray(p[k])&&!p[k].length))).length; const status=missing===0&&payload?.outline_options_md?'Can proceed after outline selection':'Needs check'; $('projectInfo').textContent=`${selectedProject} · ${payload?.topic||''}`; $('summary').innerHTML=`<div class="field"><div class="label">Status</div><div class="value">${status}</div></div><div class="field"><div class="label">Papers</div><div class="value">${rows.length}</div></div><div class="field"><div class="label">Incomplete Rows</div><div class="value">${missing}</div></div><div class="field"><div class="label">Outline Options</div><div class="value">${payload?.outline_options_md?'present':'missing'}</div></div><div class="field"><div class="label">Selected Outline</div><div class="value">${payload?.selected_outline_md?'present':'not selected yet'}</div></div><div class="field"><div class="label">Human Check</div><div class="value">1. 主内容是否真的来自全文阅读。\\n2. 最相关图是否能概括该论文工作。\\n3. 大纲是否覆盖主要文献类别。\\n4. 选定后写入 selected_outline.md。</div></div>`; }
+    function render(){ renderList(); renderMain(); renderSummary(); }
+    $('projectSelect').addEventListener('change',e=>loadProject(e.target.value));
+    $('filter').addEventListener('input',renderList);
+    $('paperList').addEventListener('click',e=>{const b=e.target.closest('[data-id]'); if(!b)return; selectedPaper=b.dataset.id; tab='paper'; document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab)); render();});
+    document.querySelectorAll('.tab').forEach(t=>t.addEventListener('click',()=>{tab=t.dataset.tab; document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===t)); renderMain();}));
+    loadProjects();
+  </script>
+</body>
+</html>
