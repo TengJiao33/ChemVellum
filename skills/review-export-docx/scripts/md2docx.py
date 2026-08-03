@@ -10,12 +10,11 @@ Inline support:
 Section-aware styling (auto-detected from headings OR bold-only paragraphs):
   Abstract / Keywords / Acknowledgments / References / Supporting Information
 
-Default layout profile (professional_single):
-  H1 title      : Times New Roman 18 pt
-  Section heads : Times New Roman 13.5 / 11.5 / 10.5 pt
-  Body          : Times New Roman 11 pt, justified, 1.15 spacing
-  Captions      : Times New Roman 9 pt, left aligned
-  References    : Times New Roman 9 pt with real Word numbering
+Default layout profile (chemvellum_journal):
+  Opening       : Full-width branded title and abstract
+  Body          : Compact two-column journal grid
+  Displays      : Temporary full-width figure and comparison-table sections
+  References    : Compact two-column reference section
 
 Usage:
     python3 scripts/md2docx.py --input review.md --output review.docx
@@ -112,7 +111,7 @@ _FONT_SPEC: Dict[str, Dict] = {
     "footnote":     {"font": "Times New Roman", "size": 9},
 }
 
-_DEFAULT_LAYOUT_PROFILE = "professional_single"
+_DEFAULT_LAYOUT_PROFILE = "chemvellum_journal"
 _LAYOUT_PROFILES = ("professional_single", "chemvellum_journal", "legacy_report")
 
 _CHEMVELLUM = {
@@ -2202,8 +2201,9 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=_LAYOUT_PROFILES,
         default=_DEFAULT_LAYOUT_PROFILE,
         help=(
-            "Word layout profile (default: professional_single; "
-            "chemvellum_journal adds the branded two-column editorial system; "
+            "Word layout profile (default: chemvellum_journal, the branded "
+            "two-column editorial system; professional_single selects the "
+            "portable single-column house style; "
             "legacy_report preserves the previous report-like spacing)."
         ),
     )

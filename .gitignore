@@ -3,6 +3,9 @@
 !/.gitattributes
 !/.github/
 !/.github/**
+!/AGENTS.md
+!/.qoder/
+!/.qoder/**
 !/README.md
 !/requirements.txt
 !/LICENSE*
@@ -58,6 +61,9 @@
 !/mineru-outputs/raw_zips/
 /mineru-outputs/raw_zips/*
 !/mineru-outputs/raw_zips/.gitkeep
+!/mineru-outputs/runs/
+/mineru-outputs/runs/*
+!/mineru-outputs/runs/.gitkeep
 
 !/review-projects/
 /review-projects/*

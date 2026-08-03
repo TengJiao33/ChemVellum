@@ -47,22 +47,6 @@ def run_command(command: list[str]) -> dict[str, Any]:
     }
 
 
-def render_with_libreoffice(docx: Path, pdf: Path) -> tuple[bool, dict[str, Any]]:
-    executable = shutil.which("soffice") or shutil.which("libreoffice")
-    if not executable:
-        return False, {"renderer": "LibreOffice", "available": False}
-    pdf.parent.mkdir(parents=True, exist_ok=True)
-    result = run_command(
-        [executable, "--headless", "--convert-to", "pdf", "--outdir", str(pdf.parent), str(docx)]
-    )
-    generated = pdf.parent / f"{docx.stem}.pdf"
-    if result["exit_code"] == 0 and generated.exists():
-        if generated.resolve() != pdf.resolve():
-            generated.replace(pdf)
-        return True, {"renderer": "LibreOffice", "available": True, **result}
-    return False, {"renderer": "LibreOffice", "available": True, **result}
-
-
 def ps_literal(value: Path) -> str:
     return "'" + str(value).replace("'", "''") + "'"
 
@@ -183,7 +167,7 @@ def run(args: argparse.Namespace) -> int:
     attempts = []
     rendered = False
     renderer = None
-    for function in (render_with_libreoffice, render_with_word):
+    for function in (render_with_word,):
         rendered, attempt = function(render_docx, render_pdf)
         if temporary_workspace is not None:
             attempt["used_short_working_path"] = True
@@ -243,7 +227,7 @@ def run(args: argparse.Namespace) -> int:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Render a review DOCX with LibreOffice or Microsoft Word, then rasterize every page.")
+    parser = argparse.ArgumentParser(description="Render a review DOCX with Microsoft Word, then rasterize every page.")
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument(
         "--output-pdf",

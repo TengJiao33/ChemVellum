@@ -25,6 +25,14 @@ OPEN_REUSE_RE = re.compile(
     re.I,
 )
 RESTRICTED_REUSE_RE = re.compile(r"all rights reserved", re.I)
+SAFE_PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+
+
+def validate_project_id(value: str) -> str:
+    project_id = str(value or "").strip()
+    if not SAFE_PROJECT_ID_RE.fullmatch(project_id) or project_id in {".", ".."}:
+        raise ValueError("Unsafe project_id")
+    return project_id
 
 
 def read_json(path: Path) -> Any:
@@ -60,7 +68,34 @@ def resolve_source_path(review_root: Path, value: Any) -> Path | None:
     return path if path.is_absolute() else review_root / path
 
 
-def selected_paper_ids(project: Path) -> list[str]:
+def normalize_doi(value: Any) -> str:
+    doi = clean(value).lower()
+    doi = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", doi)
+    return doi.rstrip(".,;)")
+
+
+def registry_ids_by_doi(review_root: Path) -> dict[str, str]:
+    path = review_root / "review-library" / "registry" / "papers.jsonl"
+    if not path.is_file():
+        return {}
+    index: dict[str, str] = {}
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        if not raw_line.strip():
+            continue
+        try:
+            row = json.loads(raw_line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(row, dict):
+            continue
+        paper_id = clean(row.get("paper_id"))
+        doi = normalize_doi(row.get("doi"))
+        if paper_id and doi:
+            index.setdefault(doi, paper_id)
+    return index
+
+
+def selected_paper_ids(review_root: Path, project: Path) -> list[str]:
     path = project / "00_discovery" / "selected_discovery_results.json"
     data = read_json(path)
     rows = []
@@ -73,15 +108,35 @@ def selected_paper_ids(project: Path) -> list[str]:
         rows = data
     ids: list[str] = []
     seen: set[str] = set()
+    if isinstance(data, dict):
+        for value in data.get("candidate_paper_ids") or []:
+            paper_id = clean(value)
+            if paper_id and paper_id not in seen:
+                seen.add(paper_id)
+                ids.append(paper_id)
     for row in rows:
         if not isinstance(row, dict):
             continue
         if row.get("keep") is False:
             continue
-        paper_id = str(row.get("paper_id") or "").strip()
+        paper_id = clean(row.get("paper_id") or row.get("local_paper_id"))
         if paper_id and paper_id not in seen:
             seen.add(paper_id)
             ids.append(paper_id)
+
+    # A download-only repository import can be promoted later by metadata prep,
+    # leaving discovery rows without local paper IDs.  Recover that project-to-
+    # library link by DOI so a subsequent figure inventory does not report zero
+    # papers merely because candidate_update was skipped.
+    if not ids and isinstance(data, dict):
+        doi_index = registry_ids_by_doi(review_root)
+        for row in data.get("web_papers") or []:
+            if not isinstance(row, dict) or row.get("keep") is False:
+                continue
+            paper_id = doi_index.get(normalize_doi(row.get("doi")), "")
+            if paper_id and paper_id not in seen:
+                seen.add(paper_id)
+                ids.append(paper_id)
     return ids
 
 
@@ -446,7 +501,7 @@ def render_browser_html(inventory: dict[str, Any], output: Path) -> None:
 
 def build_inventory(review_root: Path, project_id: str) -> dict[str, Any]:
     project = review_root / "review-projects" / project_id
-    ids = selected_paper_ids(project)
+    ids = selected_paper_ids(review_root, project)
     papers = []
     all_candidates: list[dict[str, Any]] = []
     for paper_id in ids:
@@ -653,7 +708,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     review_root = Path(args.review_root).resolve()
-    project = review_root / "review-projects" / args.project_id
+    project_id = validate_project_id(args.project_id)
+    project = review_root / "review-projects" / project_id
     if not project.exists():
         raise SystemExit(f"Project not found: {project}")
     out = (
@@ -661,7 +717,7 @@ def main() -> int:
         if args.output
         else project / "assets" / "paper_figure_inventory.json"
     )
-    inventory = build_inventory(review_root, args.project_id)
+    inventory = build_inventory(review_root, project_id)
     write_json(out, inventory)
     browser = (
         Path(args.browser_output).resolve()

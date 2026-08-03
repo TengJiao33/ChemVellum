@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import ast
 import hashlib
 import json
@@ -66,6 +67,63 @@ STRUCTURED_TAG_KEYS = [
     "reaction_type",
     "document_scope",
 ]
+
+
+class RegistryFileLock:
+    """Cross-process advisory lock for registry allocation and replacement."""
+
+    def __init__(self, path: Path, timeout: float = 30.0) -> None:
+        self.path = path
+        self.timeout = timeout
+        self.handle = None
+
+    def acquire(self) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        handle = self.path.open("a+b")
+        handle.seek(0, os.SEEK_END)
+        if handle.tell() == 0:
+            handle.write(b"0")
+            handle.flush()
+        deadline = time.monotonic() + self.timeout
+        while True:
+            try:
+                handle.seek(0)
+                if os.name == "nt":
+                    import msvcrt
+
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                self.handle = handle
+                return
+            except OSError:
+                if time.monotonic() >= deadline:
+                    handle.close()
+                    raise TimeoutError(
+                        f"Timed out waiting for metadata registry lock: {self.path}"
+                    )
+                time.sleep(0.05)
+
+    def release(self) -> None:
+        handle = self.handle
+        if handle is None:
+            return
+        try:
+            handle.seek(0)
+            if os.name == "nt":
+                import msvcrt
+
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        finally:
+            handle.close()
+            self.handle = None
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -281,8 +339,23 @@ def max_paper_number(rows: list[dict[str, Any]]) -> int:
     return max_number
 
 
-def registry_key(row: dict[str, Any]) -> str:
-    return str(row.get("source_pdf") or row.get("markdown_path") or row.get("slug") or row.get("paper_id") or "")
+def registry_key(row: dict[str, Any], review_root: Path | None = None) -> str:
+    for field in ("source_pdf", "markdown_path"):
+        value = str(row.get(field) or "").strip()
+        if not value:
+            continue
+        path = Path(value)
+        if review_root is not None and not path.is_absolute():
+            path = review_root / path
+        try:
+            return os.path.normcase(str(path.resolve()))
+        except OSError:
+            return os.path.normcase(str(path.absolute()))
+    slug = str(row.get("slug") or "").strip()
+    if slug:
+        return f"slug:{slug}"
+    paper_id = str(row.get("paper_id") or "").strip()
+    return f"paper_id:{paper_id}" if paper_id else ""
 
 
 def content_list_path(extracted_dir: Path) -> Path | None:
@@ -1148,8 +1221,17 @@ def run(args: argparse.Namespace) -> int:
         print("WARN: --use-llm was set but OPENAI_API_KEY is missing; using rules only.", file=sys.stderr)
         use_llm = False
 
+    registry_lock = RegistryFileLock(
+        out_registry.with_suffix(out_registry.suffix + ".lock")
+    )
+    registry_lock.acquire()
+    atexit.register(registry_lock.release)
     existing_rows = read_registry_rows(out_registry) if args.append_registry else []
-    existing_by_key = {registry_key(row): row for row in existing_rows if registry_key(row)}
+    existing_by_key = {
+        registry_key(row, review_root): row
+        for row in existing_rows
+        if registry_key(row, review_root)
+    }
     rows: list[dict[str, Any]] = []
     next_paper_number = max_paper_number(existing_rows) + 1
     for index, job in enumerate(jobs, start=1):
@@ -1169,7 +1251,14 @@ def run(args: argparse.Namespace) -> int:
             origin_candidates = sorted(extracted_dir.glob("*_origin.pdf"))
             if origin_candidates:
                 pdf_path = origin_candidates[0].resolve()
-        candidate_key = str(pdf_path) if pdf_path else str(md_path or slug)
+        candidate_key = registry_key(
+            {
+                "source_pdf": str(pdf_path) if pdf_path else "",
+                "markdown_path": str(md_path) if md_path else "",
+                "slug": slug,
+            },
+            review_root,
+        )
         existing_row = existing_by_key.get(candidate_key)
         if existing_row:
             paper_id = str(existing_row.get("paper_id"))
@@ -1220,11 +1309,21 @@ def run(args: argparse.Namespace) -> int:
         print(f"{paper_id} {slug} metadata written")
 
     if args.append_registry:
-        new_keys = {registry_key(row) for row in rows if registry_key(row)}
-        rows = [row for row in existing_rows if registry_key(row) not in new_keys] + rows
+        new_keys = {
+            registry_key(row, review_root)
+            for row in rows
+            if registry_key(row, review_root)
+        }
+        rows = [
+            row
+            for row in existing_rows
+            if registry_key(row, review_root) not in new_keys
+        ] + rows
     tmp = out_registry.with_suffix(".jsonl.tmp")
     tmp.write_text("".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows), encoding="utf-8")
     tmp.replace(out_registry)
+    registry_lock.release()
+    atexit.unregister(registry_lock.release)
     print(f"Wrote {len(rows)} papers to {out_registry}")
     return 0
 

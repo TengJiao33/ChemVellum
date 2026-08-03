@@ -5,6 +5,7 @@ import argparse
 import json
 import mimetypes
 import posixpath
+import re
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,23 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
+
+
+SAFE_PROJECT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+
+
+def review_project_path(review_root: Path, project_id: str) -> Path:
+    """Return a contained project path for a portable, URL-safe identifier."""
+    project_id = str(project_id or "").strip()
+    if not SAFE_PROJECT_ID_RE.fullmatch(project_id):
+        raise ValueError(f"invalid project id: {project_id!r}")
+    base = (review_root / "review-projects").resolve()
+    candidate = (base / project_id).resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(f"project path escapes review-projects: {project_id!r}") from exc
+    return candidate
 
 
 class DashboardHandler(BaseHTTPRequestHandler):
@@ -126,13 +144,24 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_error(HTTPStatus.NOT_FOUND, "Not found")
 
     def handle_project_export_docx(self, project_id: str) -> None:
-        project = self.review_root / "review-projects" / project_id
-        stage = project / "05_final_audit"
-        md_path = stage / "final_draft.md"
-        if not md_path.exists():
-            self.send_error(HTTPStatus.BAD_REQUEST, "final_draft.md not found")
+        try:
+            project = review_project_path(self.review_root, project_id)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
             return
-        docx_path = stage / "final_draft.docx"
+        deliverables = project / "deliverables"
+        candidates = [
+            deliverables / "review.md",
+            project / "manuscript.with-assets.md",
+            project / "manuscript.md",
+            project / "05_final_audit" / "final_draft.md",
+        ]
+        md_path = next((path for path in candidates if path.exists()), None)
+        if md_path is None:
+            self.send_error(HTTPStatus.BAD_REQUEST, "no manuscript markdown found")
+            return
+        deliverables.mkdir(parents=True, exist_ok=True)
+        docx_path = deliverables / "review.docx"
         script = self.review_root / "skills" / "review-export-docx" / "scripts" / "md2docx.py"
         if not script.exists():
             self.send_error(HTTPStatus.INTERNAL_SERVER_ERROR, "md2docx.py not found")
@@ -193,14 +222,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_json([p for p in list_review_projects(self.review_root) if p.get("has_discovery")])
 
     def handle_discovery_get(self, project_id: str) -> None:
-        path = self.discovery_path(project_id)
+        try:
+            path = self.discovery_path(project_id)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
         if not path.exists():
             self.send_error(HTTPStatus.NOT_FOUND, "discovery data not found")
             return
         self.send_file(path, "application/json; charset=utf-8")
 
     def handle_discovery_put(self, project_id: str, confirm: bool = False) -> None:
-        path = self.discovery_path(project_id)
+        try:
+            path = self.discovery_path(project_id)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
         length = int(self.headers.get("Content-Length") or 0)
         try:
             data = json.loads(self.rfile.read(length).decode("utf-8"))
@@ -233,14 +270,22 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_json({"ok": True, "confirmed": confirm})
 
     def handle_project_draft_get(self, project_id: str) -> None:
-        project = self.review_root / "review-projects" / project_id
+        try:
+            project = review_project_path(self.review_root, project_id)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
         if not project.exists():
             self.send_error(HTTPStatus.NOT_FOUND, "project not found")
             return
         self.send_json(project_draft_payload(self.review_root, project_id))
 
     def handle_project_stage_get(self, project_id: str, stage: str) -> None:
-        project = self.review_root / "review-projects" / project_id
+        try:
+            project = review_project_path(self.review_root, project_id)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
         if not project.exists():
             self.send_error(HTTPStatus.NOT_FOUND, "project not found")
             return
@@ -273,7 +318,11 @@ class DashboardHandler(BaseHTTPRequestHandler):
         self.send_file(candidate, mime)
 
     def handle_project_draft_put(self, project_id: str) -> None:
-        project = self.review_root / "review-projects" / project_id
+        try:
+            project = review_project_path(self.review_root, project_id)
+        except ValueError as exc:
+            self.send_error(HTTPStatus.BAD_REQUEST, str(exc))
+            return
         if not project.exists():
             self.send_error(HTTPStatus.NOT_FOUND, "project not found")
             return
@@ -283,20 +332,20 @@ class DashboardHandler(BaseHTTPRequestHandler):
         except Exception as exc:
             self.send_error(HTTPStatus.BAD_REQUEST, f"invalid draft payload: {exc}")
             return
-        stage_dir = project / "04_first_draft"
-        stage_dir.mkdir(parents=True, exist_ok=True)
+        notes_dir = project / "notes"
+        notes_dir.mkdir(parents=True, exist_ok=True)
         if "first_draft_md" in data:
-            (stage_dir / "first_draft.md").write_text(str(data.get("first_draft_md") or ""), encoding="utf-8")
+            (project / "manuscript.md").write_text(str(data.get("first_draft_md") or ""), encoding="utf-8")
         if "merge_report_md" in data:
-            (stage_dir / "merge_report.md").write_text(str(data.get("merge_report_md") or ""), encoding="utf-8")
+            (notes_dir / "merge_report.md").write_text(str(data.get("merge_report_md") or ""), encoding="utf-8")
         if "remaining_issues_md" in data:
-            (stage_dir / "remaining_issues.md").write_text(str(data.get("remaining_issues_md") or ""), encoding="utf-8")
+            (notes_dir / "remaining_issues.md").write_text(str(data.get("remaining_issues_md") or ""), encoding="utf-8")
         if "draft_bundle" in data and isinstance(data.get("draft_bundle"), dict):
-            write_json(stage_dir / "draft_bundle.json", data["draft_bundle"])
+            write_json(notes_dir / "draft_bundle.json", data["draft_bundle"])
         self.send_json({"ok": True, "project_id": project_id})
 
     def discovery_path(self, project_id: str) -> Path:
-        return self.review_root / "review-projects" / project_id / "00_discovery" / "combined_results_by_keyword.json"
+        return review_project_path(self.review_root, project_id) / "00_discovery" / "combined_results_by_keyword.json"
 
     def handle_metadata_get(self, paper_id: str) -> None:
         path = self.metadata_dir / f"{paper_id}.metadata.json"
@@ -508,6 +557,12 @@ def read_json_if_exists(path: Path) -> Any:
 
 
 def infer_project_topic(project: Path) -> str:
+    manifest = read_json_if_exists(project / "project.json")
+    if isinstance(manifest, dict):
+        if manifest.get("title"):
+            return str(manifest.get("title"))
+        if manifest.get("topic"):
+            return str(manifest.get("topic"))
     discovery = read_json_if_exists(project / "00_discovery" / "combined_results_by_keyword.json")
     if isinstance(discovery, dict) and discovery.get("topic"):
         return str(discovery.get("topic"))
@@ -517,7 +572,15 @@ def infer_project_topic(project: Path) -> str:
             line = line.strip()
             if line.startswith("# "):
                 return line[2:].strip()
-    bundle = read_json_if_exists(project / "04_first_draft" / "draft_bundle.json")
+    manuscript = project / "manuscript.md"
+    if manuscript.exists():
+        for line in manuscript.read_text(encoding="utf-8", errors="ignore").splitlines():
+            line = line.strip()
+            if line.startswith("# "):
+                return line[2:].strip()
+    bundle = read_json_if_exists(project / "notes" / "draft_bundle.json")
+    if not isinstance(bundle, dict):
+        bundle = read_json_if_exists(project / "04_first_draft" / "draft_bundle.json")
     if isinstance(bundle, dict) and bundle.get("topic"):
         return str(bundle.get("topic"))
     return ""
@@ -530,6 +593,13 @@ def list_review_projects(review_root: Path) -> list[dict[str, Any]]:
         return projects
     for project in sorted(p for p in base.iterdir() if p.is_dir()):
         discovery_state = read_json_if_exists(project / "00_discovery" / "human_check_state.json") or {}
+        manifest = read_json_if_exists(project / "project.json") or {}
+        assets_dir = project / "assets"
+        deliverables_dir = project / "deliverables"
+        has_assets = assets_dir.exists() and any(path.is_file() for path in assets_dir.rglob("*"))
+        has_deliverables = deliverables_dir.exists() and any(path.is_file() for path in deliverables_dir.rglob("*"))
+        has_manuscript = (project / "manuscript.md").exists()
+        run_count = len([path for path in (project / "runs").iterdir() if path.is_dir()]) if (project / "runs").exists() else 0
         projects.append(
             {
                 "project_id": project.name,
@@ -539,9 +609,14 @@ def list_review_projects(review_root: Path) -> list[dict[str, Any]]:
                 "has_matrix_outline": (project / "01_matrix_outline" / "literature_matrix.json").exists(),
                 "has_blueprint": (project / "01_matrix_outline" / "section_blueprint.json").exists(),
                 "has_section_drafting": (project / "02_section_drafting" / "section_drafts.md").exists(),
-                "has_figure_redraw": (project / "03_figure_redraw" / "redrawn_figure_manifest.json").exists(),
-                "has_first_draft": (project / "04_first_draft" / "first_draft.md").exists(),
-                "has_final_audit": (project / "05_final_audit" / "final_draft.md").exists(),
+                "has_assets": has_assets,
+                "has_manuscript": has_manuscript,
+                "has_deliverables": has_deliverables,
+                "current_discovery_run_id": manifest.get("current_discovery_run_id"),
+                "archived_run_count": run_count,
+                "has_figure_redraw": has_assets or (project / "03_figure_redraw" / "redrawn_figure_manifest.json").exists(),
+                "has_first_draft": has_manuscript or (project / "04_first_draft" / "first_draft.md").exists(),
+                "has_final_audit": has_deliverables or (project / "05_final_audit" / "final_draft.md").exists(),
             }
         )
     return projects
@@ -552,7 +627,7 @@ def project_summary(review_root: Path, project_id: str) -> dict[str, Any] | None
 
 
 def project_matrix_payload(review_root: Path, project_id: str) -> dict[str, Any]:
-    project = review_root / "review-projects" / project_id
+    project = review_project_path(review_root, project_id)
     stage = project / "01_matrix_outline"
     return {
         "project_id": project_id,
@@ -569,7 +644,7 @@ def project_matrix_payload(review_root: Path, project_id: str) -> dict[str, Any]
 
 
 def project_blueprint_payload(review_root: Path, project_id: str) -> dict[str, Any]:
-    project = review_root / "review-projects" / project_id
+    project = review_project_path(review_root, project_id)
     stage = project / "01_matrix_outline"
     return {
         "project_id": project_id,
@@ -583,7 +658,7 @@ def project_blueprint_payload(review_root: Path, project_id: str) -> dict[str, A
 
 
 def project_sections_payload(review_root: Path, project_id: str) -> dict[str, Any]:
-    project = review_root / "review-projects" / project_id
+    project = review_project_path(review_root, project_id)
     stage = project / "02_section_drafting"
     section_files = []
     sections_dir = stage / "sections"
@@ -606,42 +681,67 @@ def project_sections_payload(review_root: Path, project_id: str) -> dict[str, An
 
 
 def project_figures_payload(review_root: Path, project_id: str) -> dict[str, Any]:
-    project = review_root / "review-projects" / project_id
+    project = review_project_path(review_root, project_id)
     draft_stage = project / "02_section_drafting"
     stage = project / "03_figure_redraw"
+    assets = project / "assets"
     return {
         "project_id": project_id,
         "topic": infer_project_topic(project),
         "summary": project_summary(review_root, project_id),
         "figure_candidates": read_json_if_exists(draft_stage / "figure_candidates.json"),
-        "redrawn_manifest": read_json_if_exists(stage / "redrawn_figure_manifest.json"),
-        "figure_redraw_report_md": read_text_if_exists(stage / "figure_redraw_report.md"),
-        "paths": {"stage_dir": str(stage), "draft_stage_dir": str(draft_stage)},
+        "redrawn_manifest": (
+            read_json_if_exists(assets / "asset_manifest.json")
+            or read_json_if_exists(stage / "redrawn_figure_manifest.json")
+        ),
+        "paper_figure_inventory": read_json_if_exists(assets / "paper_figure_inventory.json"),
+        "insertion_report": read_json_if_exists(assets / "insertion_report.json"),
+        "figure_redraw_report_md": (
+            read_text_if_exists(assets / "figure_notes.md")
+            or read_text_if_exists(stage / "figure_redraw_report.md")
+        ),
+        "paths": {"stage_dir": str(assets), "draft_stage_dir": str(draft_stage)},
     }
 
 
 def project_final_payload(review_root: Path, project_id: str) -> dict[str, Any]:
-    project = review_root / "review-projects" / project_id
-    stage = project / "05_final_audit"
-    docx_path = stage / "final_draft.docx"
+    project = review_project_path(review_root, project_id)
+    deliverables = project / "deliverables"
+    legacy_stage = project / "05_final_audit"
+    docx_candidates = sorted(deliverables.glob("*.docx")) if deliverables.exists() else []
+    docx_path = docx_candidates[0] if docx_candidates else legacy_stage / "final_draft.docx"
+    final_md = deliverables / "review.md"
+    if not final_md.exists():
+        final_md = legacy_stage / "final_draft.md"
     return {
         "project_id": project_id,
         "topic": infer_project_topic(project),
         "summary": project_summary(review_root, project_id),
-        "final_draft_md": read_text_if_exists(stage / "final_draft.md"),
-        "final_audit_report_md": read_text_if_exists(stage / "final_audit_report.md"),
-        "release_report_md": read_text_if_exists(stage / "release_report.md"),
+        "final_draft_md": read_text_if_exists(final_md),
+        "final_audit_report_md": (
+            read_text_if_exists(deliverables / "final_audit_report.md")
+            or read_text_if_exists(legacy_stage / "final_audit_report.md")
+        ),
+        "release_report_md": (
+            read_text_if_exists(deliverables / "release_report.md")
+            or read_text_if_exists(legacy_stage / "release_report.md")
+        ),
         "final_draft_docx_path": str(docx_path),
         "final_draft_docx_exists": docx_path.exists(),
-        "paths": {"stage_dir": str(stage)},
+        "paths": {"stage_dir": str(deliverables)},
     }
 
 
 def project_draft_payload(review_root: Path, project_id: str) -> dict[str, Any]:
-    project = review_root / "review-projects" / project_id
-    stage_dir = project / "04_first_draft"
-    figures_manifest = read_json_if_exists(project / "03_figure_redraw" / "redrawn_figure_manifest.json") or {}
-    draft_bundle = read_json_if_exists(stage_dir / "draft_bundle.json")
+    project = review_project_path(review_root, project_id)
+    notes_dir = project / "notes"
+    legacy_stage = project / "04_first_draft"
+    figures_manifest = (
+        read_json_if_exists(project / "assets" / "asset_manifest.json")
+        or read_json_if_exists(project / "03_figure_redraw" / "redrawn_figure_manifest.json")
+        or {}
+    )
+    draft_bundle = read_json_if_exists(notes_dir / "draft_bundle.json") or read_json_if_exists(legacy_stage / "draft_bundle.json")
     section_drafts = read_json_if_exists(project / "02_section_drafting" / "section_drafts.json")
     redrawn = []
     for row in (figures_manifest.get("figures") or []):
@@ -652,17 +752,17 @@ def project_draft_payload(review_root: Path, project_id: str) -> dict[str, Any]:
         "topic": infer_project_topic(project),
         "summary": next((p for p in list_review_projects(review_root) if p["project_id"] == project_id), None),
         "draft_bundle": draft_bundle,
-        "first_draft_md": read_text_if_exists(stage_dir / "first_draft.md"),
-        "merge_report_md": read_text_if_exists(stage_dir / "merge_report.md"),
-        "remaining_issues_md": read_text_if_exists(stage_dir / "remaining_issues.md"),
+        "first_draft_md": read_text_if_exists(project / "manuscript.md") or read_text_if_exists(legacy_stage / "first_draft.md"),
+        "merge_report_md": read_text_if_exists(notes_dir / "merge_report.md") or read_text_if_exists(legacy_stage / "merge_report.md"),
+        "remaining_issues_md": read_text_if_exists(notes_dir / "remaining_issues.md") or read_text_if_exists(legacy_stage / "remaining_issues.md"),
         "section_drafts": section_drafts,
         "redrawn_figures": redrawn,
         "paths": {
-            "stage_dir": str(stage_dir),
-            "first_draft_base_dir": str(stage_dir),
-            "first_draft": str(stage_dir / "first_draft.md"),
-            "merge_report": str(stage_dir / "merge_report.md"),
-            "remaining_issues": str(stage_dir / "remaining_issues.md"),
+            "stage_dir": str(project),
+            "first_draft_base_dir": str(project),
+            "first_draft": str(project / "manuscript.md"),
+            "merge_report": str(notes_dir / "merge_report.md"),
+            "remaining_issues": str(notes_dir / "remaining_issues.md"),
         },
     }
 

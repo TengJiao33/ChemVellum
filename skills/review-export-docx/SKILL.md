@@ -24,14 +24,7 @@ in filenames are replaced without otherwise shortening the paper title.
 
 The converter supports Markdown headings, tables, images, references, inline
 math, chemical subscripts/superscripts, page numbers, and academic styles.
-Its default `professional_single` layout is a portable Word house style:
-11 pt justified body text with a one-em first-line indent, unindented lead
-paragraphs after headings and displays, left-aligned captions, real body-list
-numbering, stable hanging-indent reference labels, and table orphan protection. Use
-`--layout-profile legacy_report` only when reproducing the previous 12 pt,
-left-aligned, 1.5-spaced report layout is intentional.
-
-Use `--layout-profile chemvellum_journal` for the branded publication layout.
+Its default `chemvellum_journal` layout is the branded publication layout.
 It keeps the title and abstract in a full-width opening section, switches the
 review body and references to a compact two-column grid, and temporarily opens
 full-width sections for evidence figures and comparison tables. The original
@@ -40,6 +33,14 @@ Cambria body text and captions, consistently indented prose, Arial navigation,
 a padded pale-teal abstract panel, deliberate comparison-table columns, and
 quiet running furniture provide a portable Word-native journal system without
 copying one publisher's masthead.
+
+Use `--layout-profile professional_single` only when a portable single-column
+Word house style is explicitly needed. It uses 11 pt justified body text with a
+one-em first-line indent, unindented lead paragraphs after headings and
+displays, left-aligned captions, real body-list numbering, stable
+hanging-indent reference labels, and table orphan protection. Use
+`--layout-profile legacy_report` only when reproducing the previous 12 pt,
+left-aligned, 1.5-spaced report layout is intentional.
 Figure, Scheme, Chart, and Table prefixes in image alt text become caption
 styles. Markdown tables render as three-line academic tables with a distinct
 header style, content-aware alignment, and subtle row guidance. Scheme images
@@ -62,7 +63,8 @@ stacked sub- and superscripts.
 
 ## PDF and page images
 
-Immediately render the DOCX:
+Immediately render the DOCX. On Windows this uses an installed Microsoft Word
+through a non-interactive COM export; it does not invoke LibreOffice:
 
 ```bash
 python skills/review-export-docx/scripts/render_docx.py \

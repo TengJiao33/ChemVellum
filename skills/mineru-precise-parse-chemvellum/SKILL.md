@@ -84,8 +84,11 @@ The skill writes:
 - `mineru-outputs/extracted/<slug>/`
 - `mineru-outputs/raw_zips/*.zip`
 - `mineru-outputs/manifest.json`
+- `mineru-outputs/runs/<run_id>.json`
 
-The Markdown copies are the main deliverable.
+`manifest.json` is the latest-run pointer. Every actual parsing invocation also
+writes a timestamp-and-process run manifest under `runs/`, so a later invocation
+does not erase the earlier execution record. The Markdown copies are the main deliverable.
 The extracted directories keep `full.md`, images, and MinerU sidecar JSON for downstream chunking, provenance, and figure extraction.
 
 ## Boundary

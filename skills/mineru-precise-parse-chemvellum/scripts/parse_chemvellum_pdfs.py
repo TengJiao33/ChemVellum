@@ -66,7 +66,12 @@ def ensure_parent(path: Path) -> None:
 
 def write_json(path: Path, payload: Dict[str, Any]) -> None:
     ensure_parent(path)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
 
 
 def parse_args() -> argparse.Namespace:
@@ -539,8 +544,10 @@ def main() -> int:
         print("No PDFs need processing.")
         return 0
 
+    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ") + f"-{os.getpid()}"
     manifest: Dict[str, Any] = {
         "tool": "mineru-precise-parse-chemvellum",
+        "run_id": run_id,
         "skill_root": str(SKILL_ROOT),
         "input_dir": str(input_dir),
         "output_dir": str(output_dir),
@@ -571,6 +578,8 @@ def main() -> int:
     manifest["finished_at"] = now_utc()
     manifest["completed_count"] = len(manifest["completed"])
     manifest["failed_count"] = len(manifest["failed"])
+    run_manifest_path = output_dir / "runs" / f"{run_id}.json"
+    write_json(run_manifest_path, manifest)
     write_json(output_dir / "manifest.json", manifest)
 
     print(
@@ -580,6 +589,7 @@ def main() -> int:
                 "completed_count": manifest["completed_count"],
                 "failed_count": manifest["failed_count"],
                 "manifest_path": str(output_dir / "manifest.json"),
+                "run_manifest_path": str(run_manifest_path),
             },
             ensure_ascii=False,
             indent=2,

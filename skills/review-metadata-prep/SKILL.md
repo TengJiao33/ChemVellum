@@ -60,4 +60,6 @@ python skills/review-metadata-prep/scripts/batch_llm_retag_metadata.py \
 Core outputs are `review-library/registry/papers.jsonl` and
 `review-library/metadata/papers/<paper_id>.metadata.json`. Validation reports
 describe mechanical completeness; optional descriptors do not decide whether a
-paper may support a review.
+paper may support a review. Stable IDs use the next available `P001`, `P002`,
+and so on. Registry allocation and replacement are protected by a cross-process
+file lock so simultaneous writers cannot silently reuse the same paper ID.
