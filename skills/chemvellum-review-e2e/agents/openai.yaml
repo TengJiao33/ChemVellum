@@ -1,0 +1,6 @@
+interface:
+  display_name: "ChemVellum Review E2E"
+  short_description: "Run a chemistry review from topic to inspected PDF."
+  default_prompt: "Use $chemvellum-review-e2e to take my chemistry topic through a complete evidence-led review run and deliver the inspected DOCX and PDF."
+policy:
+  allow_implicit_invocation: true

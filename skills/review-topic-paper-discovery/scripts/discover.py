@@ -18,6 +18,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from create_project import (
+    archive_current_discovery,
+    ensure_review_project,
+    record_discovery_run,
+)
 from sciatlas_client import SciAtlasClient, load_config, papers_from_response
 
 
@@ -2012,6 +2017,66 @@ def finalize_local_ranking(
         )
 
 
+def finalize_external_ranking(
+    entries: list[dict[str, Any]],
+    topic_contract: dict[str, Any] | None,
+) -> None:
+    """Add topic-contract and coverage signals to provider-ranked web rows.
+
+    Provider relevance is useful for ranking one paper at a time, but a review
+    corpus must also expose which parts of the declared scope each paper may
+    help screen.  These fields remain metadata-level screening aids; they do
+    not make a scientific selection or prove that the paper was read.
+    """
+    contract_terms = contract_ranking_terms(topic_contract)
+    required_terms = required_contract_terms(topic_contract)
+    coverage_phrases = (
+        topic_contract.get("important_coverage") or []
+        if isinstance(topic_contract, dict)
+        else []
+    )
+    for entry in entries:
+        signal = ranking_signal(entry)
+        contract_hits = sorted({term for term in contract_terms if term in signal})
+        required_misses = [term for term in required_terms if not required_term_present(term, signal)]
+        coverage_hits = []
+        for phrase in coverage_phrases:
+            phrase_terms = [term for term in tokenize(str(phrase)) if term not in RANKING_STOPWORDS]
+            if phrase_terms and sum(term in signal for term in phrase_terms) >= min(2, len(phrase_terms)):
+                coverage_hits.append(str(phrase))
+        try:
+            provider_score = float(entry.get("score") or 0)
+        except (TypeError, ValueError):
+            provider_score = 0.0
+        category_count = len(set(entry.get("matched_keyword_categories") or []))
+        ranking_score = (
+            provider_score
+            + min(len(contract_hits) * 0.025, 0.5)
+            + min(category_count * 0.05, 0.2)
+            + min(len(coverage_hits) * 0.04, 0.2)
+            - min(len(required_misses) * 0.8, 1.6)
+        )
+        title = str(entry.get("title") or "").lower()
+        orientation_terms = (
+            "review", "perspective", "accounts", "overview", "advances",
+            "progress", "principles", "tutorial", "outlook",
+        )
+        entry["provider_score"] = round(provider_score, 4)
+        entry["contract_term_hits"] = contract_hits
+        entry["important_coverage_hits"] = coverage_hits
+        entry["required_contract_terms"] = required_terms
+        entry["required_contract_term_misses"] = required_misses
+        entry["ranking_score"] = round(ranking_score, 4)
+        entry["screening_role_hint"] = (
+            "orientation_review"
+            if any(term in title for term in orientation_terms)
+            else "primary_or_specialist_candidate"
+        )
+        entry["ranking_reason"] = (
+            "provider relevance plus topic-contract, query-category, and coverage signals"
+        )
+
+
 def selected_from_combined(
     combined: list[dict[str, Any]],
     max_local_candidates: int = 0,
@@ -2062,10 +2127,18 @@ def selected_from_combined(
                 key = _result_dedupe_key(result)
                 entry = selected["web_papers"].setdefault(
                     key,
-                    {**result, "matched_keyword": group["keyword"], "matched_keywords": []},
+                    {
+                        **result,
+                        "matched_keyword": group["keyword"],
+                        "matched_keywords": [],
+                        "matched_keyword_categories": [],
+                    },
                 )
                 if group["keyword"] not in entry["matched_keywords"]:
                     entry["matched_keywords"].append(group["keyword"])
+                category = str(group.get("category") or "uncategorized")
+                if category not in entry["matched_keyword_categories"]:
+                    entry["matched_keyword_categories"].append(category)
     selected["local_papers"] = list(selected["local_papers"].values())
     finalize_local_ranking(selected["local_papers"], topic_contract)
     required_terms = required_contract_terms(topic_contract)
@@ -2080,8 +2153,13 @@ def selected_from_combined(
         reverse=True,
     )
     selected["web_papers"] = list(selected["web_papers"].values())
+    finalize_external_ranking(selected["web_papers"], topic_contract)
     selected["web_papers"].sort(
-        key=lambda row: (row.get("score") or 0, row.get("year") or 0),
+        key=lambda row: (
+            row.get("ranking_score") or 0,
+            row.get("provider_score") or row.get("score") or 0,
+            row.get("year") or 0,
+        ),
         reverse=True,
     )
     if max_local_candidates > 0:
@@ -2142,6 +2220,14 @@ def build_external_ingest_plan(
                 "doi": row.get("doi"),
                 "abstract": row.get("abstract"),
                 "matched_keywords": row.get("matched_keywords") or [row.get("matched_keyword")],
+                "matched_keyword_categories": row.get("matched_keyword_categories") or [],
+                "provider_score": row.get("provider_score", row.get("score")),
+                "ranking_score": row.get("ranking_score", row.get("score")),
+                "ranking_reason": row.get("ranking_reason"),
+                "contract_term_hits": row.get("contract_term_hits") or [],
+                "important_coverage_hits": row.get("important_coverage_hits") or [],
+                "required_contract_term_misses": row.get("required_contract_term_misses") or [],
+                "screening_role_hint": row.get("screening_role_hint"),
                 "local_paper_id": local_paper_id,
                 "open_access_pdf_url": pdf_url,
                 "open_access_full_text_url": full_text_url,
@@ -2188,6 +2274,96 @@ def build_external_ingest_plan(
         "importable_count": actionable + repository_actionable,
         "full_text_located_count": located,
         "items": items,
+    }
+
+
+def build_corpus_plan_draft(
+    project_id: str,
+    discovery_run_id: str,
+    topic_contract: dict[str, Any] | None,
+    ingest_plan: dict[str, Any],
+) -> dict[str, Any]:
+    """Expose a set-level screening surface between discovery and ingestion.
+
+    The draft does not choose papers automatically.  It keeps every lawfully
+    importable candidate visible, shows provisional coverage and literature
+    roles, and gives the model one place to design a coherent reading corpus.
+    """
+    importable_actions = {"download_then_mineru", "ingest_repository_full_text"}
+    candidates = []
+    for item in ingest_plan.get("items") or []:
+        if not isinstance(item, dict) or item.get("action") not in importable_actions:
+            continue
+        candidates.append(
+            {
+                key: item.get(key)
+                for key in (
+                    "paper_key",
+                    "title",
+                    "authors",
+                    "year",
+                    "journal",
+                    "doi",
+                    "abstract",
+                    "action",
+                    "source",
+                    "provider_score",
+                    "ranking_score",
+                    "ranking_reason",
+                    "matched_keywords",
+                    "matched_keyword_categories",
+                    "contract_term_hits",
+                    "important_coverage_hits",
+                    "required_contract_term_misses",
+                    "screening_role_hint",
+                )
+            }
+        )
+    coverage_axes = []
+    for axis in (
+        topic_contract.get("important_coverage") or []
+        if isinstance(topic_contract, dict)
+        else []
+    ):
+        coverage_axes.append(
+            {
+                "axis": str(axis),
+                "candidate_paper_keys": [
+                    str(row.get("paper_key"))
+                    for row in candidates
+                    if str(axis) in (row.get("important_coverage_hits") or [])
+                ],
+            }
+        )
+    return {
+        "report_type": "corpus_plan_draft",
+        "project_id": project_id,
+        "discovery_run_id": discovery_run_id,
+        "central_question": (
+            topic_contract.get("central_question")
+            if isinstance(topic_contract, dict)
+            else None
+        ),
+        "coverage_axes": coverage_axes,
+        "orientation_candidate_paper_keys": [
+            str(row.get("paper_key"))
+            for row in candidates
+            if row.get("screening_role_hint") == "orientation_review"
+        ],
+        "importable_candidate_count": len(candidates),
+        "candidates": candidates,
+        "selection": {
+            "selected_paper_keys": [],
+            "selection_rationale": "",
+            "uncovered_or_deferred_axes": [],
+        },
+        "guidance": (
+            "Screen this as a literature set, not as an ordered list of isolated papers. "
+            "Choose a coherent initial corpus spanning orientation, primary evidence, "
+            "comparisons, historical change, contrary evidence, and scope boundaries. "
+            "Metadata and abstracts support screening only; ingestion makes selected full "
+            "text available for reading and does not make it citable."
+        ),
     }
 
 
@@ -2260,14 +2436,23 @@ def run(args: argparse.Namespace) -> int:
     )
     keyword_seed = args.keywords or ", ".join(contract_seed.get("suggested_keywords") or [])
     user_keywords = split_keywords(keyword_seed)
-    project_id = args.project_id or slugify(topic)
+    manuscript_title = str(contract_seed.get("manuscript_title") or "").strip()
+    project_manifest = ensure_review_project(
+        review_root,
+        topic,
+        title=manuscript_title,
+        project_id=args.project_id,
+    )
+    project_id = str(project_manifest["project_id"])
     project = review_root / "review-projects" / project_id
+    archived_discovery = archive_current_discovery(project)
     out_dir = project / "00_discovery"
     out_dir.mkdir(parents=True, exist_ok=True)
     discovery_run_id = (
         datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
         + f"-{os.getpid()}"
     )
+    record_discovery_run(project, discovery_run_id, topic, "in_progress")
     in_progress_path = out_dir / ".discovery_in_progress.json"
     write_json(
         in_progress_path,
@@ -2296,7 +2481,6 @@ def run(args: argparse.Namespace) -> int:
     quality_requirements = contract_seed.get("quality_requirements")
     if isinstance(quality_requirements, dict):
         topic_contract["quality_requirements"] = quality_requirements
-    manuscript_title = str(contract_seed.get("manuscript_title") or "").strip()
     if manuscript_title:
         topic_contract["manuscript_title"] = manuscript_title
     retrieval_query = str(contract_seed.get("retrieval_query") or "").strip()
@@ -2631,10 +2815,22 @@ def run(args: argparse.Namespace) -> int:
     )
     ingest_plan["discovery_run_id"] = discovery_run_id
     write_json(out_dir / "external_ingest_plan.json", ingest_plan)
+    write_json(
+        out_dir / "corpus_plan.draft.json",
+        build_corpus_plan_draft(
+            project_id,
+            discovery_run_id,
+            topic_contract,
+            ingest_plan,
+        ),
+    )
     write_report(out_dir, topic, keyword_set, combined)
     cleanup_discovery_marker()
     atexit.unregister(cleanup_discovery_marker)
+    record_discovery_run(project, discovery_run_id, topic, "completed")
     print(f"Discovery project: {project}")
+    if archived_discovery:
+        print(f"Previous discovery archived: {archived_discovery}")
     print(f"Keyword set: {out_dir / 'keyword_set.draft.json'}")
     print(f"Discovery review: http://127.0.0.1:8765/discovery")
     return 0
@@ -2643,7 +2839,14 @@ def run(args: argparse.Namespace) -> int:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Discover local and web papers by expanded topic keywords.")
     parser.add_argument("--review-root", default=str(Path(__file__).resolve().parents[3]))
-    parser.add_argument("--project-id", default="")
+    parser.add_argument(
+        "--project-id",
+        default="",
+        help=(
+            "Existing or explicit project ID. Omit it to allocate the next "
+            "CVR-0001-topic style ID."
+        ),
+    )
     parser.add_argument("--topic", default="")
     parser.add_argument(
         "--topic-contract-file",

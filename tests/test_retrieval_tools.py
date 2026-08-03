@@ -6,12 +6,21 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 
 REPO = Path(__file__).resolve().parents[1]
 DISCOVERY_DIR = REPO / "skills" / "review-topic-paper-discovery" / "scripts"
 DISCOVER = DISCOVERY_DIR / "discover.py"
+CREATE_PROJECT = DISCOVERY_DIR / "create_project.py"
 INGEST = DISCOVERY_DIR / "ingest_external_papers.py"
+MINERU = (
+    REPO
+    / "skills"
+    / "mineru-precise-parse-chemvellum"
+    / "scripts"
+    / "parse_chemvellum_pdfs.py"
+)
 FIGURES = (
     REPO
     / "skills"
@@ -34,6 +43,7 @@ def load_module(name: str, path: Path):
         spec = importlib.util.spec_from_file_location(name, path)
         module = importlib.util.module_from_spec(spec)
         assert spec.loader is not None
+        sys.modules[name] = module
         spec.loader.exec_module(module)
         return module
     finally:
@@ -43,10 +53,163 @@ def load_module(name: str, path: Path):
 class RetrievalToolTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
+        cls.projects = load_module("review_project_allocator", CREATE_PROJECT)
         cls.discovery = load_module("review_discovery_tools", DISCOVER)
         cls.ingest = load_module("review_ingest_tools", INGEST)
         cls.figures = load_module("review_figure_inventory_tools", FIGURES)
         cls.metadata = load_module("review_metadata_tools", METADATA)
+        cls.mineru = load_module("review_mineru_tools", MINERU)
+
+    def test_review_and_experiment_ids_are_allocated_without_overwrite(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = self.projects.ensure_review_project(
+                root,
+                "Mechanistic selectivity in catalytic depolymerization",
+            )
+            second = self.projects.ensure_review_project(
+                root,
+                "Electrochemical polymer upcycling",
+            )
+            experiment_one = self.projects.ensure_experiment(
+                root,
+                "retrieval smoke test",
+                date_key="20260801",
+            )
+            experiment_two = self.projects.ensure_experiment(
+                root,
+                "rendering smoke test",
+                date_key="20260801",
+            )
+
+            self.assertTrue(first["project_id"].startswith("CVR-0001-"))
+            self.assertTrue(second["project_id"].startswith("CVR-0002-"))
+            self.assertTrue(experiment_one["experiment_id"].startswith("EXP-20260801-001-"))
+            self.assertTrue(experiment_two["experiment_id"].startswith("EXP-20260801-002-"))
+            project = root / "review-projects" / first["project_id"]
+            self.assertTrue((project / "project.json").exists())
+            self.assertTrue((project / "manuscript.md").exists())
+            for directory in ("00_discovery", "assets", "deliverables", "notes", "runs"):
+                self.assertTrue((project / directory).is_dir())
+
+    def test_project_allocator_rejects_escaping_ids_and_releases_its_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with self.assertRaises(ValueError):
+                self.projects.ensure_review_project(
+                    root,
+                    "unsafe project",
+                    project_id="../outside",
+                )
+            lock_path = root / "review-projects" / ".project_registry.lock"
+            with self.projects.file_lock(lock_path, timeout=0.1):
+                with self.assertRaises(TimeoutError):
+                    with self.projects.file_lock(lock_path, timeout=0.05):
+                        pass
+            with self.projects.file_lock(lock_path, timeout=0.1):
+                pass
+
+    def test_discovery_rerun_archives_the_previous_batch(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = self.projects.ensure_review_project(root, "A review topic")
+            project = root / "review-projects" / manifest["project_id"]
+            run_id = "20260801T010203000000Z-123"
+            self.projects.record_discovery_run(
+                project,
+                run_id,
+                "A review topic",
+                "completed",
+            )
+            (project / "00_discovery" / "combined_results_by_keyword.json").write_text(
+                "{}\n",
+                encoding="utf-8",
+            )
+
+            archive = self.projects.archive_current_discovery(project)
+
+            self.assertEqual(archive, project / "runs" / run_id / "discovery")
+            self.assertTrue((archive / "combined_results_by_keyword.json").exists())
+            self.assertEqual(list((project / "00_discovery").iterdir()), [])
+
+    def test_metadata_registry_lock_excludes_a_second_writer(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            lock_path = Path(tmp) / "papers.jsonl.lock"
+            first = self.metadata.RegistryFileLock(lock_path, timeout=0.1)
+            second = self.metadata.RegistryFileLock(lock_path, timeout=0.05)
+            first.acquire()
+            try:
+                with self.assertRaises(TimeoutError):
+                    second.acquire()
+            finally:
+                first.release()
+            second.acquire()
+            second.release()
+
+    def test_metadata_registry_identity_matches_relative_and_absolute_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            absolute_pdf = root / "chem_papers" / "paper.pdf"
+            relative = self.metadata.registry_key(
+                {"source_pdf": "chem_papers/paper.pdf"},
+                root,
+            )
+            absolute = self.metadata.registry_key(
+                {"source_pdf": str(absolute_pdf)},
+                root,
+            )
+            self.assertEqual(relative, absolute)
+
+    def test_mineru_writes_latest_and_per_run_manifests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            input_dir = root / "chem_papers"
+            output_dir = root / "mineru-outputs"
+            input_dir.mkdir()
+            source = input_dir / "paper.pdf"
+            source.write_bytes(b"%PDF-1.4\n")
+            args = SimpleNamespace(
+                input_dir=input_dir,
+                output_dir=output_dir,
+                pdf=[],
+                force=False,
+                limit=0,
+                language="en",
+                model_version="vlm",
+                disable_formula=False,
+                disable_table=False,
+                ocr=False,
+                batch_size=10,
+                poll_interval=1,
+                timeout_minutes=1,
+            )
+            original_parse_args = self.mineru.parse_args
+            original_resolve_token = self.mineru.resolve_token
+            original_discover_jobs = self.mineru.discover_jobs
+            original_run_batch = self.mineru.run_batch
+            self.mineru.parse_args = lambda: args
+            self.mineru.resolve_token = lambda _args: "token"
+            self.mineru.discover_jobs = lambda *_args: [
+                self.mineru.ParseJob(1, source, input_dir, "paper", "paper-1")
+            ]
+
+            def fake_run_batch(_session, _token, jobs, _args, _output, manifest):
+                manifest["completed"].append({"slug": jobs[0].slug})
+
+            self.mineru.run_batch = fake_run_batch
+            try:
+                self.assertEqual(self.mineru.main(), 0)
+            finally:
+                self.mineru.parse_args = original_parse_args
+                self.mineru.resolve_token = original_resolve_token
+                self.mineru.discover_jobs = original_discover_jobs
+                self.mineru.run_batch = original_run_batch
+
+            latest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+            run_manifests = list((output_dir / "runs").glob("*.json"))
+            self.assertEqual(len(run_manifests), 1)
+            archived = json.loads(run_manifests[0].read_text(encoding="utf-8"))
+            self.assertEqual(archived["run_id"], latest["run_id"])
 
     def test_generic_query_plan_does_not_leak_allene_vocabulary(self) -> None:
         rows = self.discovery.infer_keywords(
@@ -126,6 +289,143 @@ class RetrievalToolTests(unittest.TestCase):
             [row["keyword"] for row in chosen],
             ["core", "route-a-1", "route-b-1"],
         )
+
+    def test_corpus_plan_exposes_set_level_coverage_before_ingestion(self) -> None:
+        topic_contract = {
+            "central_question": "How do catalyst state and substrate scope trade off?",
+            "important_coverage": [
+                "catalyst speciation and oxidation state",
+                "substrate scope and selectivity boundaries",
+            ],
+        }
+        combined = [
+            {
+                "keyword": "catalyst speciation",
+                "category": "mechanism",
+                "keep": True,
+                "local_results": [],
+                "web_results": [
+                    {
+                        "external_id": "review-paper",
+                        "title": "Review of catalyst speciation and oxidation state",
+                        "abstract": "A mechanistic overview of catalyst speciation and oxidation state.",
+                        "year": 2025,
+                        "score": 1.2,
+                        "source": "europe_pmc",
+                        "repository_full_text_url": "https://example.org/review.xml",
+                        "repository_format": "jats_xml",
+                        "keep": True,
+                    }
+                ],
+            },
+            {
+                "keyword": "substrate scope",
+                "category": "document_scope",
+                "keep": True,
+                "local_results": [],
+                "web_results": [
+                    {
+                        "external_id": "primary-paper",
+                        "title": "Substrate scope and selectivity boundaries in catalysis",
+                        "abstract": "Primary experiments compare substrate scope and selectivity boundaries.",
+                        "year": 2024,
+                        "score": 1.0,
+                        "source": "openalex",
+                        "open_access_pdf_url": "https://example.org/primary.pdf",
+                        "keep": True,
+                    }
+                ],
+            },
+        ]
+
+        selected = self.discovery.selected_from_combined(
+            combined,
+            topic_contract=topic_contract,
+        )
+        ingest_plan = self.discovery.build_external_ingest_plan(
+            "CVR-TEST",
+            selected["web_papers"],
+            True,
+        )
+        corpus_plan = self.discovery.build_corpus_plan_draft(
+            "CVR-TEST",
+            "RUN-TEST",
+            topic_contract,
+            ingest_plan,
+        )
+
+        self.assertEqual(corpus_plan["importable_candidate_count"], 2)
+        self.assertEqual(corpus_plan["selection"]["selected_paper_keys"], [])
+        self.assertIn("review-paper", corpus_plan["orientation_candidate_paper_keys"])
+        self.assertTrue(
+            all(axis["candidate_paper_keys"] for axis in corpus_plan["coverage_axes"])
+        )
+        self.assertTrue(
+            all("ranking_score" in item for item in ingest_plan["items"])
+        )
+        self.assertTrue(
+            all("important_coverage_hits" in item for item in ingest_plan["items"])
+        )
+
+    def test_corpus_plan_selection_imports_the_whole_explicit_set(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "corpus_plan.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "project_id": "CVR-TEST",
+                        "discovery_run_id": "RUN-TEST",
+                        "selection": {
+                            "selected_paper_keys": ["paper-a", "paper-b", "paper-a"]
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            keys = self.ingest.corpus_plan_paper_keys(
+                path,
+                "CVR-TEST",
+                "RUN-TEST",
+            )
+        plan = {
+            "items": [
+                {"paper_key": "paper-a", "action": "download_then_mineru"},
+                {"paper_key": "paper-b", "action": "ingest_repository_full_text"},
+                {"paper_key": "paper-c", "action": "download_then_mineru"},
+            ]
+        }
+        chosen = self.ingest.select_items(plan, keys, limit=1)
+        self.assertEqual(keys, ["paper-a", "paper-b"])
+        self.assertEqual([row["paper_key"] for row in chosen], keys)
+        self.assertEqual(
+            self.ingest.unresolved_requested_paper_keys(
+                chosen,
+                ["paper-a", "paper-b", "missing-paper"],
+            ),
+            ["missing-paper"],
+        )
+
+    def test_promoted_paper_ids_accumulate_across_ingest_batches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            discovery_dir = Path(tmp)
+            selected_path = discovery_dir / "selected_discovery_results.json"
+            selected_path.write_text(
+                json.dumps({"local_papers": []}),
+                encoding="utf-8",
+            )
+            self.ingest.add_promotions_to_candidates(
+                discovery_dir,
+                [({"paper_key": "external-a"}, "P900", {"title": "First"})],
+            )
+            self.ingest.add_promotions_to_candidates(
+                discovery_dir,
+                [({"paper_key": "external-b"}, "P901", {"title": "Second"})],
+            )
+            selected = json.loads(selected_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(selected["newly_ingested_paper_ids"], ["P900", "P901"])
+        self.assertEqual(selected["latest_ingested_paper_ids"], ["P901"])
+        self.assertEqual(selected["candidate_paper_ids"], ["P900", "P901"])
 
     def test_markdown_topic_input_accepts_common_sections(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -413,6 +713,45 @@ class RetrievalToolTests(unittest.TestCase):
         self.assertNotIn("inventory_score", html)
         self.assertEqual(len(preview_files), 1)
         self.assertIn("browser_files/P001-V0001-", html)
+
+    def test_figure_inventory_recovers_promoted_web_papers_by_doi(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            project = root / "review-projects" / "CVR-0001-topic"
+            discovery = project / "00_discovery"
+            discovery.mkdir(parents=True)
+            (discovery / "selected_discovery_results.json").write_text(
+                json.dumps(
+                    {
+                        "candidate_paper_ids": [],
+                        "local_papers": [],
+                        "web_papers": [
+                            {
+                                "doi": "https://doi.org/10.1000/example",
+                                "title": "A repository paper promoted later",
+                            }
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry = root / "review-library" / "registry"
+            registry.mkdir(parents=True)
+            (registry / "papers.jsonl").write_text(
+                json.dumps(
+                    {
+                        "paper_id": "P042",
+                        "doi": "10.1000/example",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                self.figures.selected_paper_ids(root, project),
+                ["P042"],
+            )
 
     def test_generic_metadata_descriptors_do_not_require_allene_labels(self) -> None:
         prompt = self.metadata.classification_rules_prompt({})

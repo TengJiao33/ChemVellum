@@ -1,21 +1,23 @@
 ---
 name: review-topic-paper-discovery
-description: Search the local library and scholarly providers for a review topic, locate lawful full text, download or import it, run MinerU when needed, and add the result to the managed local library.
+description: Create a numbered ChemVellum review or experiment workspace, search the local library and scholarly providers for a review topic, locate lawful full text, download or import it, run MinerU when needed, and add the result to the managed local library.
 ---
 
 # Topic Paper Discovery
 
-Use this tool for the retrieval loop:
+Use this tool for the retrieval and corpus-building loop:
 
 ```text
 topic query -> local and external candidates -> lawful full text
--> PDF download or repository import -> MinerU when needed -> local library
+-> set-level corpus design -> PDF download or repository import
+-> MinerU when needed -> local library -> later gap filling
 ```
 
 The model supplies the topic and decides relevance. The scripts handle provider
 queries, deduplication, lawful source locations, download/import, parsing, and
 library registration. Search broadly enough to assemble a useful candidate
-pool, then apply close relevance judgment before ingestion.
+pool. Design the initial corpus as a set before ingestion; do not turn the first
+few high-ranked or easily acquired rows into the literature base by default.
 
 ## Topic input
 
@@ -23,14 +25,48 @@ Use a short Markdown or JSON file containing the topic, central question,
 important coverage, and optional inclusion/exclusion criteria. `focused` and
 `comprehensive` describe the intended scope.
 
+## Project and experiment IDs
+
+Create a review project before retrieval when you want to inspect or reuse its
+ID explicitly:
+
+```bash
+python skills/review-topic-paper-discovery/scripts/create_project.py \
+  --review-root . \
+  review \
+  --topic "<chemistry question>"
+```
+
+New reviews use `CVR-0001-<topic>`, `CVR-0002-<topic>`, and so on. The project
+contains `project.json`, `00_discovery/`, `manuscript.md`, `assets/`,
+`deliverables/`, `notes/`, and `runs/`. Use an explicit `--project-id` only to continue a
+known project or to import a deliberately assigned safe ID.
+
+Allocate an isolated local experiment with:
+
+```bash
+python skills/review-topic-paper-discovery/scripts/create_project.py \
+  --review-root . \
+  experiment \
+  --topic "<benchmark or QA purpose>"
+```
+
+Experiments use `EXP-YYYYMMDD-001-<topic>` within each UTC day. The local
+registries serialize concurrent allocation and remain ignored by Git.
+
 ## Search
 
 ```bash
 python skills/review-topic-paper-discovery/scripts/discover.py \
   --review-root . \
-  --topic-contract-file <topic.md-or-json> \
-  --project-id <project_id>
+  --topic-contract-file <topic.md-or-json>
 ```
+
+Omitting `--project-id` allocates the next `CVR-*` project. To continue an
+existing review, pass its exact ID. Before a repeated discovery run writes the
+canonical `00_discovery/` directory, ChemVellum moves the previous batch to
+`runs/<discovery_run_id>/discovery`; it refuses to overwrite an unidentifiable
+or already archived batch.
 
 The default external routes are Crossref, Europe PMC, and deposited-reference
 expansion. Semantic Scholar and SciAtlas are optional enrichments. Provider
@@ -69,27 +105,49 @@ its scope or interpretation. Discovery can reuse a relevant review found by any
 provider as a deposited-reference seed.
 
 Discovery writes a ranked local/external result set and
-`external_ingest_plan.json`. Provider reports distinguish no relevant results
-from provider failure. Use metadata and abstracts for screening, then consult
-full text for material claims in the manuscript.
+`external_ingest_plan.json`. It also writes `corpus_plan.draft.json`, which
+groups every lawfully importable candidate with topic-contract coverage and a
+provisional orientation-versus-primary role. Provider reports distinguish no
+relevant results from provider failure. Use metadata and abstracts for
+screening, then consult full text for material claims in the manuscript.
+
+## Build the corpus before ingestion
+
+Copy `00_discovery/corpus_plan.draft.json` to a project-local working corpus
+plan such as `notes/corpus_plan.json`. Screen the candidates as a literature
+set, then populate `selection.selected_paper_keys`, a concise
+`selection_rationale`, and any genuinely deferred or uncovered axes.
+
+Do not select papers merely because they appear first, are easiest to acquire,
+or fit a convenient batch size. Assemble a coherent initial reading corpus
+that spans the reader question: orientation reviews, direct primary evidence,
+meaningful comparisons, historical changes, competing explanations, and scope
+boundaries. Prefer high recall at ingestion for lawful, clearly relevant full
+text because the managed library is cumulative; reserve strict citation
+selection for after reading.
+
+The corpus plan is the model's scientific screening decision, not an automatic
+ranking verdict or a paper quota. If the candidate set cannot support the
+declared coverage, narrow the scope or run another discovery pass before
+sustained drafting. Keep unselected candidates available as a reserve for
+targeted promotion when reading or writing exposes a gap.
 
 ## Acquire and ingest
 
-Screen the plan, then import the selected rows:
+Screen the corpus, then import the selected set in one call:
 
 ```bash
 python skills/review-topic-paper-discovery/scripts/ingest_external_papers.py \
   --review-root . \
   --project-id <project_id> \
-  --paper-key <paper_key> \
-  --paper-key <paper_key> \
+  --corpus-plan review-projects/<project_id>/notes/corpus_plan.json \
   --mineru-batch-size 10
 ```
 
-Select candidates that address a named method family, a meaningful comparison,
-an origin of the field, or a representative development in the review scope.
-Use `--all-available` when every available plan row has already been screened
-and retained.
+Use repeated `--paper-key` only for a small targeted gap-fill after the initial
+corpus exists. Use `--all-available` when every available plan row has already
+been screened and retained. The MinerU batch size controls parsing operations;
+it must not silently become the size of the scientific corpus.
 
 The importer:
 
@@ -114,8 +172,10 @@ account. If the available evidence supports a narrower story, narrow the story.
 
 ## Selection
 
-`selected_discovery_results.json` is a candidate list. Record a short selection
-reason when useful. Open the current local full text before relying on a paper;
+`selected_discovery_results.json` is a cumulative candidate list. Its
+`newly_ingested_paper_ids` retains every source promoted during the discovery
+run, while `latest_ingested_paper_ids` records only the most recent batch.
+Open the current local full text before relying on a paper;
 search snippets, abstracts, earlier summaries, and remembered readings support
 screening but do not replace that reading step. Ingestion makes a paper
 available for reading; it does not create a reason to cite it. Cite a paper when

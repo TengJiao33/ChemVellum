@@ -6,7 +6,10 @@ description: Browse figures, schemes, charts, spectra, images, and other visuals
 # Source Figure Tools
 
 Use source visuals when they communicate evidence or chemical relationships
-more clearly than prose. The useful visual type depends on the subject:
+more clearly than prose. Build the inventory promptly after the retained papers
+are registered, then browse it alongside full-text reading and before sustained
+drafting. Do not wait until a compact manuscript is finished and then choose a
+small count of convenient images. The useful visual type depends on the subject:
 reaction Schemes, spectra, chromatograms, microscopy, crystal structures,
 phase diagrams, apparatus, process flows, computed surfaces, and result plots
 can all carry the main evidence.
@@ -40,9 +43,10 @@ line, and surrounding discussion.
 
 Select visuals while reading and drafting. Ask what the reader should learn
 from the visual, then choose the source asset that directly answers that
-question. Prefer a primary source for a specific experiment, transformation,
-or measurement. A review-level figure is appropriate when the text itself
-makes a review-level classification or historical comparison.
+question. Let the visual set grow with the argument rather than deciding its
+size in advance. Prefer a primary source for a specific experiment,
+transformation, or measurement. A review-level figure is appropriate when the
+text itself makes a review-level classification or historical comparison.
 
 For each chosen asset, create an `asset_manifest.json` row for deterministic
 insertion. A reused paper asset records:

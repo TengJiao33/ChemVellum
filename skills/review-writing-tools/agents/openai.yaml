@@ -1,4 +1,6 @@
 interface:
   display_name: "Review Writing Tools"
-  short_description: "Develop a chemistry review through synthesis."
-  default_prompt: "Use $review-writing-tools to find the review's intellectual center, synthesize the chemistry across sources, and draft an evidence-bounded argument."
+  short_description: "Revise evidence-backed chemistry manuscripts only."
+  default_prompt: "Use $review-writing-tools to improve this existing evidence-backed manuscript's central judgment, chemical comparisons, and prose."
+policy:
+  allow_implicit_invocation: false

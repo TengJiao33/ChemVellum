@@ -1,4 +1,4 @@
 interface:
   display_name: "Topic Paper Discovery"
-  short_description: "Find, acquire, parse, and register lawful full text."
-  default_prompt: "Use $review-topic-paper-discovery to search local and external sources, acquire lawful full text, run MinerU when needed, and add useful papers to the managed library."
+  short_description: "Build a review corpus and acquire lawful full text."
+  default_prompt: "Use $review-topic-paper-discovery to create or continue a numbered ChemVellum project, search local and external sources, design a coverage-driven reading corpus, acquire its lawful full text, run MinerU when needed, and add the papers to the managed library."

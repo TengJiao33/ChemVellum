@@ -1,17 +1,30 @@
 ---
 name: review-writing-tools
-description: Develop and write a chemistry review by finding the intellectual problem, forming an evidence-bounded central judgment, comparing literature on meaningful axes, preserving chemical precision, and choosing visuals that perform synthesis. Also use the managed-paper search and manuscript-inspection tools when they help.
+description: "Develop, revise, or assess the intellectual and chemical quality of an existing chemistry review after managed full-text evidence is being read or a manuscript already exists. Use for a bounded writing, synthesis, comparison, or manuscript-review task. Never use this Skill to start from a new topic or to satisfy a request to write, create, produce, run, continue, or finish a complete review; route those requests to chemvellum-review-e2e. This Skill does not own project creation, discovery, ingestion, citation assembly, export, or the end-to-end run."
 ---
 
 # Think and Write a Chemistry Review
+
+## Redirect complete-review requests
+
+If the user supplied a topic and expects a review to be written or completed,
+stop before creating files or drafting. Read
+`skills/chemvellum-review-e2e/SKILL.md` completely and continue under that
+Skill. Do this even if this writing Skill was selected automatically. A topic,
+an empty project, or an empty local library is not an existing evidence base.
+
+Do not create a manual numbered bibliography from model memory. Do not treat
+the ability to produce fluent prose as evidence that the literature was found,
+opened, or understood.
 
 Write one canonical Markdown manuscript. Keep optional notes and helper outputs
 inside the review project.
 
 Treat this skill as guidance for judgment, not a form to complete. Do not emit
 planning matrices, paragraph checks, compliance reports, or proof files unless
-the user asks for them. Think continuously while reading and drafting; pause
-only when a consequential claim needs stronger evidence or a different frame.
+the user asks for them. Think continuously while reading and drafting. When a
+consequential claim needs stronger evidence or a different frame, interrupt the
+drafting to retrieve or reassess evidence.
 
 ## Find the intellectual problem
 
@@ -60,6 +73,22 @@ axes when the reader's question changes—for example, from reaction pathways to
 decision metrics and then to scale constraints. Make the transition explicit.
 Each section should inherit a question from the central problem and leave the
 reader with a changed or more qualified answer that the next section uses.
+
+## Develop a broad review in two passes
+
+Unless the user asks for a focused or mini-review, let a broad topic become a
+full-length review rather than a compact manuscript with comprehensive
+headings. Write one coherent synthesis draft to establish the central judgment
+and explanatory architecture. Then make one substantive expansion pass across
+the manuscript before final citation assembly or export. Reopen sources and the
+retained candidate pool as needed to deepen comparisons, mechanisms,
+representative cases, disagreements, and failure boundaries that the first
+draft compressed.
+
+Treat this as a single editorial return to the whole argument, not a repeated
+paragraph check or a completion gate for every section. Expansion must add
+scientific resolution, aligned evidence, or useful visual explanation; it must
+not merely restate the first draft at greater length.
 
 ## Compare before concluding
 
@@ -131,9 +160,11 @@ feed composition can be more useful than inventing a broad rule.
 
 ## Make visuals perform synthesis
 
-Choose figures, Schemes, and tables while reasoning, not after the prose is
-finished. A visual should perform an intellectual operation that prose would
-make the reader reconstruct, such as:
+Build and browse the available source-figure inventory while reading, before
+sustained drafting. Choose figures, Schemes, and tables while reasoning, not
+after the prose is finished or by deciding a count in advance. A visual should
+perform an intellectual operation that prose would make the reader reconstruct,
+such as:
 
 - exposing the review's organizing axis or causal chain;
 - aligning mechanisms, conditions, or outcomes across studies;
@@ -202,9 +233,12 @@ only for broken local mechanics such as an unknown stable paper ID or a missing
 local image. Length, visual density, table use, balance, and synthesis remain
 editorial observations.
 
-The default snapshot omits a word target. Add `--include-word-advisory` only
-when the user asks for a length reference or a mature draft appears seriously
-out of proportion to its evidence. Do not draft toward its range.
+The default snapshot omits a word target. Add `--include-word-advisory` when the
+user asks for a length reference or after the first mature draft of a broad
+full-length review. Use the evidence-scaled range to notice serious compression,
+not as a target or release gate. If a draft is plainly out of proportion to its
+opened evidence and declared scope, make the substantive expansion pass or
+narrow the scope explicitly. Do not draft toward the exact range.
 
 Use tools to locate, copy, number, format, browse, and render material. Keep
 editorial judgment with the writer. When a tool has a defect, record the issue

@@ -19,6 +19,7 @@ INSERT = REPO / "skills" / "review-citation-assets" / "scripts" / "insert_assets
 RENDER = REPO / "skills" / "review-export-docx" / "scripts" / "render_docx.py"
 MD2DOCX = REPO / "skills" / "review-export-docx" / "scripts" / "md2docx.py"
 AUDIT_DOCX = REPO / "skills" / "review-export-docx" / "scripts" / "audit_docx.py"
+DASHBOARD = REPO / "view" / "serve_review_dashboard.py"
 
 
 def load_module(name: str, path: Path):
@@ -86,6 +87,46 @@ class ReviewToolTests(unittest.TestCase):
         self.assertEqual(few["center"], 4000)
         self.assertGreater(many["center"], few["center"])
         self.assertEqual(many["basis"], "cited_papers_with_local_full_text")
+
+    def test_dashboard_reads_the_current_project_layout(self) -> None:
+        module = load_module("dashboard_current_layout", DASHBOARD)
+        project = self.root / "review-projects" / "CVR-0001-catalysis"
+        (project / "assets").mkdir(parents=True)
+        (project / "deliverables").mkdir()
+        (project / "runs" / "run-one").mkdir(parents=True)
+        write_json(
+            project / "project.json",
+            {
+                "project_id": project.name,
+                "topic": "Catalytic selectivity",
+                "title": "When does catalytic selectivity transfer?",
+                "current_discovery_run_id": "run-two",
+            },
+        )
+        (project / "manuscript.md").write_text(
+            "# Current manuscript\n\nA comparison.\n",
+            encoding="utf-8",
+        )
+        write_json(project / "assets" / "asset_manifest.json", {"assets": []})
+        (project / "deliverables" / "review.md").write_text(
+            "# Final review\n",
+            encoding="utf-8",
+        )
+        (project / "deliverables" / "review.docx").write_bytes(b"docx")
+
+        projects = module.list_review_projects(self.root)
+        self.assertEqual(projects[0]["topic"], "When does catalytic selectivity transfer?")
+        self.assertTrue(projects[0]["has_manuscript"])
+        self.assertTrue(projects[0]["has_assets"])
+        self.assertTrue(projects[0]["has_deliverables"])
+        self.assertEqual(projects[0]["archived_run_count"], 1)
+        draft = module.project_draft_payload(self.root, project.name)
+        final = module.project_final_payload(self.root, project.name)
+        self.assertIn("Current manuscript", draft["first_draft_md"])
+        self.assertIn("Final review", final["final_draft_md"])
+        self.assertEqual(final["final_draft_docx_path"], str(project / "deliverables" / "review.docx"))
+        with self.assertRaises(ValueError):
+            module.review_project_path(self.root, "../outside")
 
     def test_inspector_does_not_gate_a_short_manuscript(self) -> None:
         module = load_module("inspect_review_short", INSPECT)
@@ -564,6 +605,7 @@ class ReviewToolTests(unittest.TestCase):
         self.assertEqual(
             skill_names,
             {
+                "chemvellum-review-e2e",
                 "mineru-precise-parse-chemvellum",
                 "review-citation-assets",
                 "review-export-docx",
@@ -573,6 +615,64 @@ class ReviewToolTests(unittest.TestCase):
                 "review-writing-tools",
             },
         )
+
+    def test_e2e_skill_owns_topic_prompt_without_polluting_writing_skill(self) -> None:
+        e2e_skill = (
+            REPO / "skills" / "chemvellum-review-e2e" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        e2e_agent = (
+            REPO / "skills" / "chemvellum-review-e2e" / "agents" / "openai.yaml"
+        ).read_text(encoding="utf-8")
+        writing_skill = (
+            REPO / "skills" / "review-writing-tools" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        writing_agent = (
+            REPO / "skills" / "review-writing-tools" / "agents" / "openai.yaml"
+        ).read_text(encoding="utf-8")
+        agent_rules = (REPO / "AGENTS.md").read_text(encoding="utf-8")
+        qoder_adapter = (
+            REPO
+            / ".qoder"
+            / "skills"
+            / "chemvellum-review-e2e"
+            / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        figure_skill = (
+            REPO / "skills" / "review-source-figure-tools" / "SKILL.md"
+        ).read_text(encoding="utf-8")
+        normalized_e2e = " ".join(e2e_skill.split())
+        normalized_writing = " ".join(writing_skill.split())
+        normalized_figure = " ".join(figure_skill.split())
+
+        self.assertIn("Take ownership of the complete run", e2e_skill)
+        self.assertIn("zero stable paper-ID citations", normalized_e2e)
+        self.assertIn("Otherwise continue to the inspected deliverable", normalized_e2e)
+        self.assertIn("Write the scholarly deliverable in English by default", normalized_e2e)
+        self.assertIn("only when the user explicitly requests that language", normalized_e2e)
+        self.assertIn("complete evidence-led review run", e2e_agent)
+        self.assertIn("allow_implicit_invocation: true", e2e_agent)
+        self.assertIn("only complete ChemVellum topic-to-review workflow", e2e_skill)
+        self.assertIn("A prompt such as `Write a chemistry review", e2e_skill)
+        self.assertIn("Tell the truth about completion", e2e_skill)
+        self.assertIn("the run is still in progress", normalized_e2e)
+        self.assertNotIn("Own a topic prompt end to end", writing_skill)
+        self.assertIn("does not own project creation", writing_skill)
+        self.assertIn("Redirect complete-review requests", writing_skill)
+        self.assertIn("chemvellum-review-e2e/SKILL.md", writing_skill)
+        self.assertIn("allow_implicit_invocation: false", writing_agent)
+        self.assertIn("first read", agent_rules)
+        self.assertIn("Never report the review as complete", agent_rules)
+        self.assertIn("even if they provide only the topic", qoder_adapter)
+        self.assertIn("skills/chemvellum-review-e2e/SKILL.md", qoder_adapter)
+        self.assertIn("one substantive expansion pass", e2e_skill)
+        self.assertIn("one substantive expansion pass", writing_skill)
+        self.assertIn("one substantive expansion pass", qoder_adapter)
+        self.assertIn("--include-word-advisory", e2e_skill)
+        self.assertIn("not as a target or release gate", normalized_writing)
+        self.assertIn("before sustained drafting", normalized_figure)
+        self.assertIn("not a new stage machine", normalized_e2e)
+        self.assertNotIn("one figure per section", normalized_e2e.lower())
+        self.assertNotIn("minimum figure", normalized_e2e.lower())
 
     def test_legacy_control_plane_is_removed(self) -> None:
         legacy_paths = [
@@ -687,11 +787,15 @@ class ReviewToolTests(unittest.TestCase):
         template = REPO / "skills" / "review-export-docx" / "review_template.docx"
         document = Document(str(template))
         module._clear_body(document)
-        module._configure_academic_document(document)
+        module._configure_academic_document(
+            document,
+            layout_profile="professional_single",
+        )
         module._add_table_single(
             document,
             ["Method", "Yield"],
             [["Route A", "80%"], ["Route B", "75%"]],
+            layout_profile="professional_single",
         )
         table = document.tables[0]
 
@@ -723,11 +827,15 @@ class ReviewToolTests(unittest.TestCase):
         template = REPO / "skills" / "review-export-docx" / "review_template.docx"
         document = Document(str(template))
         module._clear_body(document)
-        module._configure_academic_document(document)
+        module._configure_academic_document(
+            document,
+            layout_profile="professional_single",
+        )
         module._add_table(
             document,
             ["Method", "Substrate", "Reagent", "Condition", "Outcome", "Scope"],
             [["Route A", "Alcohol", "Cu", "25 C", "Allene", "Broad"]],
+            layout_profile="professional_single",
         )
         self.assertEqual(len(document.tables), 2)
         self.assertEqual(len(document.tables[0].columns), 5)
@@ -751,7 +859,12 @@ class ReviewToolTests(unittest.TestCase):
             encoding="utf-8",
         )
         output = self.root / "professional.docx"
-        module.convert(markdown, output, template)
+        module.convert(
+            markdown,
+            output,
+            template,
+            layout_profile="professional_single",
+        )
         document = Document(str(output))
 
         body = document.styles["Review Body"].paragraph_format
@@ -782,7 +895,7 @@ class ReviewToolTests(unittest.TestCase):
         self.assertEqual(report["layout_profile"], "professional_single")
         self.assertEqual(report["blocking_issues"], [])
 
-    def test_docx_chemvellum_journal_uses_branded_two_column_layout(self) -> None:
+    def test_docx_defaults_to_branded_two_column_chemvellum_journal_layout(self) -> None:
         from docx import Document
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         from docx.oxml.ns import qn
@@ -807,12 +920,8 @@ class ReviewToolTests(unittest.TestCase):
             encoding="utf-8",
         )
         output = self.root / "chemvellum.docx"
-        module.convert(
-            markdown,
-            output,
-            template,
-            layout_profile="chemvellum_journal",
-        )
+        self.assertEqual(module._DEFAULT_LAYOUT_PROFILE, "chemvellum_journal")
+        module.convert(markdown, output, template)
         document = Document(str(output))
 
         self.assertEqual(document.styles["Review Title"].font.name, "Georgia")
@@ -1016,7 +1125,6 @@ class ReviewToolTests(unittest.TestCase):
             page.write_bytes(b"png fixture")
             return [str(page)], {"available": True, "exit_code": 0}
 
-        module.render_with_libreoffice = fake_render
         module.render_with_word = fake_render
         module.rasterize = fake_rasterize
         module.pdf_page_count = lambda _pdf: 1
@@ -1049,7 +1157,6 @@ class ReviewToolTests(unittest.TestCase):
             output_pdf.write_bytes(b"%PDF-1.4 fixture")
             return True, {"renderer": "fixture", "available": True, "exit_code": 0}
 
-        module.render_with_libreoffice = fake_render
         module.render_with_word = fake_render
         module.rasterize = lambda _pdf, _pages: ([], {"available": True, "exit_code": 0})
         module.pdf_page_count = lambda _pdf: 1
@@ -1080,7 +1187,6 @@ class ReviewToolTests(unittest.TestCase):
             return True, {"renderer": "fixture", "available": True, "exit_code": 0}
 
         module.needs_short_working_path = lambda _path: True
-        module.render_with_libreoffice = fake_render
         module.render_with_word = fake_render
         module.rasterize = lambda _pdf, _pages: ([], {"available": True, "exit_code": 0})
         module.pdf_page_count = lambda _pdf: 1
@@ -1099,6 +1205,12 @@ class ReviewToolTests(unittest.TestCase):
         self.assertNotEqual(seen_paths[0][0], docx)
         self.assertNotEqual(seen_paths[0][1], pdf)
         self.assertTrue(report["renderer_attempts"][0]["used_short_working_path"])
+
+    def test_render_uses_word_without_a_libreoffice_route(self) -> None:
+        module = load_module("render_docx_word_only", RENDER)
+        source = Path(module.__file__).read_text(encoding="utf-8")
+        self.assertNotIn("render_with_libreoffice", source)
+        self.assertIn("for function in (render_with_word,):", source)
 
 
 if __name__ == "__main__":

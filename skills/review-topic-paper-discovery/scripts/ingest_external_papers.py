@@ -17,6 +17,8 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any
 
+from create_project import validate_identifier
+
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -305,7 +307,15 @@ def add_promotions_to_candidates(
         promoted_ids.append(paper_id)
     candidate_ids = [str(row.get("paper_id")) for row in local_papers if isinstance(row, dict) and row.get("paper_id")]
     selected["candidate_paper_ids"] = list(dict.fromkeys(candidate_ids))
-    selected["newly_ingested_paper_ids"] = list(dict.fromkeys(promoted_ids))
+    previous_ingested = [
+        str(paper_id)
+        for paper_id in selected.get("newly_ingested_paper_ids") or []
+        if paper_id
+    ]
+    selected["newly_ingested_paper_ids"] = list(
+        dict.fromkeys(previous_ingested + promoted_ids)
+    )
+    selected["latest_ingested_paper_ids"] = list(dict.fromkeys(promoted_ids))
     write_json(selected_path, selected)
     return list(dict.fromkeys(promoted_ids))
 
@@ -919,6 +929,50 @@ def select_items(plan: dict[str, Any], paper_keys: list[str], limit: int) -> lis
     return rows[:limit] if limit > 0 and not requested else rows
 
 
+def unresolved_requested_paper_keys(
+    items: list[dict[str, Any]],
+    requested_keys: list[str],
+) -> list[str]:
+    selected_keys = {
+        str(item.get("paper_key"))
+        for item in items
+        if isinstance(item, dict) and item.get("paper_key")
+    }
+    return [key for key in requested_keys if key not in selected_keys]
+
+
+def corpus_plan_paper_keys(
+    path: Path,
+    project_id: str,
+    discovery_run_id: str,
+) -> list[str]:
+    payload = read_json(path)
+    if not isinstance(payload, dict):
+        raise ValueError("corpus plan must contain a JSON object")
+    planned_project = str(payload.get("project_id") or "")
+    planned_run = str(payload.get("discovery_run_id") or "")
+    if planned_project and planned_project != project_id:
+        raise ValueError(
+            f"corpus plan belongs to project {planned_project}, not {project_id}"
+        )
+    if planned_run and discovery_run_id and planned_run != discovery_run_id:
+        raise ValueError(
+            "corpus plan and external ingest plan come from different discovery runs"
+        )
+    selection = payload.get("selection") or {}
+    if not isinstance(selection, dict):
+        raise ValueError("corpus plan selection must contain an object")
+    raw_keys = selection.get("selected_paper_keys") or payload.get("selected_paper_keys") or []
+    if not isinstance(raw_keys, list):
+        raise ValueError("selected_paper_keys must contain a list")
+    keys = list(dict.fromkeys(str(value).strip() for value in raw_keys if str(value).strip()))
+    if not keys:
+        raise ValueError(
+            "corpus plan contains no selected_paper_keys; screen the candidate set before ingestion"
+        )
+    return keys
+
+
 def run_command(command: list[str]) -> tuple[int, str]:
     result = subprocess.run(command, text=True, encoding="utf-8", errors="replace")
     return result.returncode, " ".join(command)
@@ -931,6 +985,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--review-root", default=str(Path(__file__).resolve().parents[3]))
     parser.add_argument("--project-id", required=True)
     parser.add_argument("--paper-key", action="append", default=[])
+    parser.add_argument(
+        "--corpus-plan",
+        help=(
+            "JSON corpus plan whose selection.selected_paper_keys should be imported as "
+            "one set-level decision. Relative paths are resolved from --review-root."
+        ),
+    )
     parser.add_argument("--limit", type=int, default=3)
     parser.add_argument(
         "--all-available",
@@ -965,7 +1026,9 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     review_root = Path(args.review_root).resolve()
-    discovery_dir = review_root / "review-projects" / args.project_id / "00_discovery"
+    project_id = validate_identifier(args.project_id, "project_id")
+    args.project_id = project_id
+    discovery_dir = review_root / "review-projects" / project_id / "00_discovery"
     in_progress_path = discovery_dir / ".discovery_in_progress.json"
     if in_progress_path.exists():
         marker = read_json(in_progress_path)
@@ -987,8 +1050,34 @@ def main() -> int:
                 "Discovery outputs come from different runs; rerun discovery before ingestion."
             )
     hydrate_plan_bibliography(discovery_dir, plan)
+    corpus_path: Path | None = None
+    corpus_keys: list[str] = []
+    if args.corpus_plan:
+        corpus_path = Path(args.corpus_plan)
+        if not corpus_path.is_absolute():
+            corpus_path = review_root / corpus_path
+        corpus_path = corpus_path.resolve()
+        if not corpus_path.is_file():
+            raise SystemExit(f"Missing corpus plan: {corpus_path}")
+        try:
+            corpus_keys = corpus_plan_paper_keys(
+                corpus_path,
+                project_id,
+                str(plan.get("discovery_run_id") or ""),
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise SystemExit(f"Invalid corpus plan: {exc}") from exc
+    if args.all_available and corpus_keys:
+        raise SystemExit("Use either --corpus-plan or --all-available, not both.")
+    requested_keys = list(dict.fromkeys([*args.paper_key, *corpus_keys]))
     selection_limit = 0 if args.all_available else args.limit
-    items = select_items(plan, args.paper_key, selection_limit)
+    items = select_items(plan, requested_keys, selection_limit)
+    unresolved_keys = unresolved_requested_paper_keys(items, requested_keys)
+    if unresolved_keys:
+        raise SystemExit(
+            "Explicitly selected papers are missing or no longer importable in this "
+            f"discovery plan: {', '.join(unresolved_keys)}"
+        )
     if not items:
         raise SystemExit("No downloadable external papers matched the selection.")
 
@@ -1010,6 +1099,7 @@ def main() -> int:
         "started_at": utc_now(),
         "download_only": args.download_only,
         "all_available": args.all_available,
+        "corpus_plan": str(corpus_path) if corpus_path else None,
         "selected_count": len(items),
         "mineru_batch_size": max(1, args.mineru_batch_size),
         "phase": "downloading",

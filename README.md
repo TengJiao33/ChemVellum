@@ -2,7 +2,7 @@
 
 ChemVellum is an agent-facing system for researching, writing, illustrating,
 citing, and exporting evidence-based chemistry reviews. Its core is deliberately
-small: **7 Skills and 19 deterministic Python scripts**. The model reads papers,
+small: **8 Skills and 20 deterministic Python scripts**. The model reads papers,
 forms the review's central judgment, compares the chemistry, and writes the
 manuscript; scripts handle retrieval, storage, parsing, citation bookkeeping,
 asset placement, export, and rendering.
@@ -16,7 +16,8 @@ or large experiment archives.
 
 | Skill | Scripts | Responsibility |
 |---|---:|---|
-| `review-topic-paper-discovery` | 3 | Plan broad searches, search local and external sources, and ingest lawful full text. |
+| `chemvellum-review-e2e` | 0 | Own a topic-to-deliverable run, route work across the component Skills, and continue through inspected DOCX/PDF output. |
+| `review-topic-paper-discovery` | 4 | Create numbered projects, plan broad searches, search local and external sources, and ingest lawful full text. |
 | `mineru-precise-parse-chemvellum` | 1 | Parse local PDFs with MinerU while preserving Markdown, images, JSON, and archives. |
 | `review-metadata-prep` | 7 | Register papers, maintain portable metadata, validate records, and repair paths after relocation. |
 | `review-writing-tools` | 2 | Develop the intellectual argument, search the managed library, and inspect a manuscript without turning observations into gates. |
@@ -24,6 +25,12 @@ or large experiment archives.
 | `review-citation-assets` | 2 | Insert selected assets and generate stable citations and references. |
 | `review-export-docx` | 3 | Export Markdown to DOCX, audit document structure, render PDF, and produce page images. |
 
+The normal topic-to-deliverable entry point is
+[`skills/chemvellum-review-e2e/SKILL.md`](skills/chemvellum-review-e2e/SKILL.md).
+Agents that support `AGENTS.md` load the repository-level routing rule
+automatically. Qoder also discovers the thin project adapter in
+`.qoder/skills/chemvellum-review-e2e/`; both point to the same canonical Skill,
+so a new user can provide only a chemistry topic and ask for a review.
 The detailed writing philosophy is in
 [`skills/review-writing-tools/SKILL.md`](skills/review-writing-tools/SKILL.md).
 The compact end-to-end guide is in
@@ -33,7 +40,9 @@ The compact end-to-end guide is in
 
 ```text
 ChemVellum/
-├─ skills/                         # 7 agent Skills and 19 Python scripts
+├─ AGENTS.md                       # platform-neutral topic-to-E2E routing
+├─ .qoder/skills/                  # thin Qoder adapter to the canonical E2E Skill
+├─ skills/                         # 8 agent Skills and 20 Python scripts
 ├─ tests/                          # maintained unittest suite
 ├─ view/                           # optional local artifact browser
 ├─ template/                       # export/reference templates
@@ -42,9 +51,10 @@ ChemVellum/
 ├─ mineru-outputs/
 │  ├─ markdown/                    # normalized full text; ignored by Git
 │  ├─ extracted/                   # figures and structured parse output
-│  └─ raw_zips/                    # original MinerU result archives
-├─ review-projects/                # one generated working directory per review
-└─ workspace/experiments/          # optional local demos, benchmarks, and QA
+│  ├─ raw_zips/                    # original MinerU result archives
+│  └─ runs/                        # one immutable manifest per parse invocation
+├─ review-projects/                # CVR-0001-topic, CVR-0002-topic, ...
+└─ workspace/experiments/          # EXP-YYYYMMDD-001-topic, ...
 ```
 
 The ignored runtime directories are intentionally part of the layout through
@@ -57,7 +67,7 @@ paper library or generated demonstrations.
 - packages in `requirements.txt`
 - network access for external discovery and acquisition
 - a MinerU API token only when parsing PDFs through MinerU
-- LibreOffice or Microsoft Word for real DOCX-to-PDF conversion
+- Microsoft Word on Windows for real DOCX-to-PDF conversion
 - Poppler or MiKTeX `pdftoppm` for rendered page images
 
 Create an environment and install the Python dependencies:
@@ -103,34 +113,82 @@ An empty result is normal before papers have been added.
 
 ## Start a review
 
+For normal use, open the ChemVellum repository root and give the agent the
+topic directly, for example: `Write a chemistry review on mechanochemical
+synthesis of covalent organic frameworks.` The `chemvellum-review-e2e` Skill
+owns the complete run through lawful full-text acquisition, reading, synthesis,
+stable citations, useful visuals, the default two-column DOCX/PDF export, and
+rendered-page inspection. The scholarly manuscript and deliverables are written
+in English by default even when the request and progress conversation use
+another language; another manuscript language must be requested explicitly.
+For a broad topic, the default product is a full-length review rather than a
+mini-review: source visuals are browsed during reading, the first coherent
+manuscript is treated as a synthesis draft, and one substantive expansion pass
+deepens compressed comparisons, mechanisms, cases, boundaries, and visual
+explanations before export. Evidence-scaled length guidance is diagnostic, not
+a fixed word, page, figure, or table quota.
+The commands below document the same workflow for
+manual recovery or inspection; they are not extra setup that a normal user must
+perform.
+
 1. Define a topic, the reader's central question, scope boundaries, and the
    comparisons that would change the answer.
-2. Use `review-topic-paper-discovery` to search broadly and select candidate
-   papers.
-3. Put directly obtained PDFs under `chem_papers/`, or use the lawful repository
-   ingestion path described by the discovery Skill.
-4. Parse PDFs when necessary:
+2. Create the next numbered project:
+
+   ```bash
+   python skills/review-topic-paper-discovery/scripts/create_project.py --review-root . review --topic "your chemistry question"
+   ```
+
+   The allocator creates `CVR-0001-<topic>`, then increments the numeric prefix
+   from existing local projects. Pass that ID to discovery. Alternatively, omit
+   `--project-id` when calling `discover.py` and discovery will allocate the
+   project itself.
+3. Use `review-topic-paper-discovery` to search broadly. Discovery writes
+   `00_discovery/corpus_plan.draft.json`, where importable candidates are shown
+   together with provisional scope coverage and literature-role hints. Screen
+   the initial reading corpus as a set, record its selected paper keys and
+   rationale in a project-local corpus plan, and keep the remaining candidates
+   available for later gap filling. Do not let the first few ranked or easiest
+   downloads define the review. Re-running discovery for the same explicit
+   project moves the prior `00_discovery` batch into
+   `runs/<discovery_run_id>/discovery` before writing the new batch.
+4. Import the complete selected corpus through the lawful repository/PDF path
+   described by the discovery Skill. Directly obtained PDFs may be placed under
+   `chem_papers/`.
+5. Parse PDFs when necessary:
 
    ```bash
    python skills/mineru-precise-parse-chemvellum/scripts/parse_chemvellum_pdfs.py --input-dir chem_papers
    ```
 
-5. Register or refresh the managed library:
+6. Register or refresh the managed library:
 
    ```bash
    python skills/review-metadata-prep/scripts/prepare_metadata.py --review-root . --mineru-output mineru-outputs --pdf-root chem_papers --discover-from-pdf-root --append-registry
    ```
 
-6. Maintain the canonical manuscript at
+7. Maintain the canonical manuscript at
    `review-projects/<project_id>/manuscript.md`. Let reading and drafting reveal
    targeted follow-up searches.
-7. Use the citation, asset, and export Skills when their deterministic operation
-   is needed. Inspect the final PDF pages rather than treating successful export
-   as editorial acceptance.
+8. Resolve stable citations and selected assets before export. The default
+   export is the branded two-column `chemvellum_journal` layout. Inspect every
+   final PDF page rather than treating successful export as editorial
+   acceptance.
 
 Each Skill contains its own commands and decision boundary. ChemVellum does not
 require a stage machine, evidence matrix, fixed source count, figure quota, or
 paragraph-by-paragraph compliance report.
+
+For an isolated benchmark or QA attempt, allocate a local experiment directory:
+
+```bash
+python skills/review-topic-paper-discovery/scripts/create_project.py --review-root . experiment --topic "retrieval smoke test"
+```
+
+Project, experiment, paper, discovery-run, and MinerU-run identifiers have
+different namespaces: `CVR-*`, `EXP-*`, `P*`, and timestamped run IDs. Their
+registries and runtime contents remain ignored by Git, so a fresh clone starts
+empty while a working checkout accumulates its own library and history.
 
 ## Moving an existing working library
 
