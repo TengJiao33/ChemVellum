@@ -2164,15 +2164,56 @@ def manuscript_title(md_path: Path) -> str:
     return ""
 
 
-def document_filename_stem(title: str, fallback: str = "review") -> str:
-    """Make a readable Windows-safe filename while preserving the paper title."""
+def _truncate_filename_stem(stem: str, limit: int) -> str:
+    if len(stem) <= limit:
+        return stem
+    separator = " ... "
+    content_budget = limit - len(separator)
+    head_budget = max(16, int(content_budget * 0.62))
+    tail_budget = content_budget - head_budget
+    head = stem[:head_budget].rstrip(" .-")
+    head_boundary = head.rfind(" ")
+    if head_boundary >= max(12, int(head_budget * 0.65)):
+        head = head[:head_boundary].rstrip(" .-")
+    tail = stem[-tail_budget:].lstrip(" .-")
+    tail_boundary = tail.find(" ")
+    if 0 <= tail_boundary <= int(tail_budget * 0.35):
+        tail = tail[tail_boundary + 1 :].lstrip(" .-")
+    shortened = f"{head}{separator}{tail}"
+    return shortened[:limit].rstrip(" .-")
+
+
+def document_filename_stem(
+    title: str,
+    fallback: str = "review",
+    *,
+    output_dir: Path | None = None,
+    suffix: str = ".docx",
+    max_path_chars: int = 240,
+) -> str:
+    """Make a readable Windows-safe, title-derived filename.
+
+    The full title is retained whenever the destination permits it. In a deep
+    project directory, the title is shortened only as much as needed to keep
+    the resulting path usable by Word, PowerShell, and ordinary Windows tools.
+    """
     stem = re.sub(r"[<>:\"/\\|?*\x00-\x1f]+", " - ", title)
     stem = re.sub(r"\s+", " ", stem).strip(" .-")
     if not stem:
-        stem = fallback.strip(" .") or "review"
+        stem = re.sub(r"[<>:\"/\\|?*\x00-\x1f]+", " - ", fallback)
+        stem = re.sub(r"\s+", " ", stem).strip(" .-") or "review"
     if stem.upper() in _WINDOWS_RESERVED_STEMS:
         stem = f"{stem} manuscript"
-    return stem[:180].rstrip(" .-")
+    if output_dir is not None:
+        directory_chars = len(str(output_dir.resolve()))
+        available = max_path_chars - directory_chars - 1 - len(suffix)
+        if available < 16:
+            raise ValueError(
+                "destination directory is too long for an accessible title-named document: "
+                f"{output_dir.resolve()}"
+            )
+        stem = _truncate_filename_stem(stem, available)
+    return stem
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -2181,15 +2222,16 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Convert Markdown to DOCX using review_template.docx styles.",
     )
     p.add_argument("--input",    required=True, metavar="MD",   help="Input .md file")
-    p.add_argument(
+    output_group = p.add_mutually_exclusive_group()
+    output_group.add_argument(
         "--output",
         metavar="DOCX",
         help="Output .docx file. Omit to use the manuscript title as the filename.",
     )
-    p.add_argument(
+    output_group.add_argument(
         "--output-dir",
         metavar="DIR",
-        help="Directory for the title-named DOCX when --output is omitted.",
+        help="Directory for the title-named DOCX.",
     )
     p.add_argument("--template", default=str(_DEFAULT_TEMPLATE), metavar="DOCX",
                    help=f"Word template (default: {_DEFAULT_TEMPLATE})")
@@ -2226,7 +2268,15 @@ def main() -> None:
     else:
         output_dir = Path(args.output_dir).resolve() if args.output_dir else md_path.parent
         title = manuscript_title(md_path)
-        out_path = output_dir / f"{document_filename_stem(title, md_path.stem)}.docx"
+        try:
+            stem = document_filename_stem(
+                title,
+                md_path.stem,
+                output_dir=output_dir,
+            )
+        except ValueError as exc:
+            raise SystemExit(f"[md2docx] ERROR: {exc}") from exc
+        out_path = output_dir / f"{stem}.docx"
 
     convert(
         md_path,

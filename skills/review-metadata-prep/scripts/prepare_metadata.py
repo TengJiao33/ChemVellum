@@ -21,6 +21,13 @@ from typing import Any
 
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+\b")
 YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
+TRAILING_FOOTNOTE_MARKER_RE = re.compile(r"\s*[†‡§¶#]+\s*$")
+COPYRIGHT_AUTHOR_RE = re.compile(
+    r"(?:©|\bcopyright\b|\bthe author\(s\)\b|\ball rights reserved\b|"
+    r"\bcreative commons\b)",
+    re.I,
+)
+INLINE_LETTER_HYPHEN_RE = re.compile(r"\b([NOSP])\s+-\s*(?=[a-z])")
 
 JOURNAL_HINTS = [
     "Angewandte Chemie International Edition",
@@ -136,6 +143,17 @@ def clean_text(text: str) -> str:
     return text
 
 
+def clean_title_text(text: str) -> str:
+    text = clean_text(text)
+    text = TRAILING_FOOTNOTE_MARKER_RE.sub("", text).strip()
+    return INLINE_LETTER_HYPHEN_RE.sub(r"\1-", text)
+
+
+def clean_author_name(text: str) -> str:
+    name = clean_text(text)
+    return "" if COPYRIGHT_AUTHOR_RE.search(name) else name
+
+
 def load_dotenv(path: Path) -> None:
     if not path.exists():
         return
@@ -217,6 +235,12 @@ def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Verify the exact bytes that will replace the destination. This catches
+    # interrupted or incorrectly encoded writes at the producer boundary.
+    verified = json.loads(tmp.read_text(encoding="utf-8"))
+    if verified != data:
+        tmp.unlink(missing_ok=True)
+        raise ValueError(f"metadata JSON write verification failed: {path}")
     tmp.replace(path)
 
 
@@ -405,7 +429,7 @@ def first_heading(md: str) -> str | None:
             title = line[2:].strip()
             title = re.sub(r"!\[[^\]]*\]\([^)]*\)", "", title)
             title = re.sub(r"\$([^$]+)\$", r"\1", title)
-            return clean_text(title)
+            return clean_title_text(title)
     return None
 
 
@@ -414,7 +438,7 @@ def extract_title(blocks: list[dict[str, Any]], md: str, slug: str) -> dict[str,
     if heading and len(heading) > 20:
         return scored(heading, "markdown_first_h1", 0.88)
     for block in blocks[:12]:
-        text = clean_text(str(block.get("text") or ""))
+        text = clean_title_text(str(block.get("text") or ""))
         if block.get("text_level") == 1 and len(text) > 20 and not looks_like_section_heading(text):
             return scored(text, "content_list_text_level_1", 0.86)
     return scored(slug.replace("-", " "), "slug_fallback", 0.35)
@@ -446,6 +470,8 @@ def extract_authors(blocks: list[dict[str, Any]], title_value: str) -> dict[str,
         if title_seen:
             if text.lower().startswith("abstract:") or len(text) > 260:
                 break
+            if COPYRIGHT_AUTHOR_RE.search(text):
+                continue
             if re.search(r"\b(college|university|institute|laboratory|department|school|china|usa|abstract|keywords|herein|given the)\b", text, re.I):
                 break
             if "," in text or re.search(r"\b[A-Z][a-z]+ [A-Z][a-z]+", text):
@@ -461,6 +487,7 @@ def extract_authors(blocks: list[dict[str, Any]], title_value: str) -> dict[str,
         part = re.sub(r"\\$", "", part).strip()
         part = part.replace("\\", "")
         part = re.sub(r"^and\s+", "", part, flags=re.I).strip()
+        part = clean_author_name(part)
         if 3 <= len(part) <= 80 and not re.search(r"\b(college|university|laboratory|key)\b", part, re.I):
             authors.append(part)
     authors = dedupe(authors)
@@ -954,6 +981,16 @@ def update_quality(meta: dict[str, Any]) -> None:
         warnings.append("low_confidence_title")
     if float(meta.get("abstract", {}).get("confidence") or 0) < 0.75:
         warnings.append("low_confidence_abstract")
+    title_value = str(meta.get("title", {}).get("value") or "")
+    author_values = meta.get("authors", {}).get("value") or []
+    if isinstance(author_values, str):
+        author_values = [author_values]
+    if TRAILING_FOOTNOTE_MARKER_RE.search(title_value):
+        warnings.append("title_has_trailing_footnote_marker")
+    if INLINE_LETTER_HYPHEN_RE.search(title_value):
+        warnings.append("title_has_inline_markup_spacing")
+    if any(COPYRIGHT_AUTHOR_RE.search(str(value)) for value in author_values):
+        warnings.append("authors_include_copyright_statement")
     meta["quality"] = {
         "missing_fields": dedupe(missing),
         "warnings": dedupe(warnings),
@@ -972,10 +1009,32 @@ def existing_metadata(path: Path) -> dict[str, Any] | None:
         return None
 
 
-def _jats_text(element: ET.Element | None) -> str:
+def _jats_text(
+    element: ET.Element | None,
+    *,
+    skip_xref_types: set[str] | None = None,
+) -> str:
     if element is None:
         return ""
-    return clean_text(" ".join(element.itertext()))
+    skipped = skip_xref_types or set()
+    parts: list[str] = []
+
+    def visit(node: ET.Element) -> None:
+        if node.text:
+            parts.append(node.text)
+        for child in list(node):
+            local_name = child.tag.rsplit("}", 1)[-1]
+            skip_child = (
+                local_name == "xref"
+                and str(child.get("ref-type") or "").lower() in skipped
+            )
+            if not skip_child:
+                visit(child)
+            if child.tail:
+                parts.append(child.tail)
+
+    visit(element)
+    return clean_text("".join(parts))
 
 
 def _jats_first(root: ET.Element, local_name: str) -> ET.Element | None:
@@ -992,9 +1051,25 @@ def extract_jats_metadata(path: Path | None) -> dict[str, Any]:
         root = ET.fromstring(path.read_bytes())
     except (ET.ParseError, OSError):
         return {}
+    title_element = _jats_first(root, "article-title")
+    abstract_element = _jats_first(root, "abstract")
+    abstract_paragraphs = (
+        [
+            _jats_text(element)
+            for element in abstract_element.iter()
+            if element.tag.rsplit("}", 1)[-1] == "p" and _jats_text(element)
+        ]
+        if abstract_element is not None
+        else []
+    )
     result: dict[str, Any] = {
-        "title": _jats_text(_jats_first(root, "article-title")),
-        "abstract": _jats_text(_jats_first(root, "abstract")),
+        "title": clean_title_text(
+            _jats_text(
+                title_element,
+                skip_xref_types={"fn", "author-notes", "corresp"},
+            )
+        ),
+        "abstract": clean_text(" ".join(abstract_paragraphs)),
         "journal": _jats_text(_jats_first(root, "journal-title")),
     }
     authors: list[str] = []
@@ -1011,7 +1086,9 @@ def extract_jats_metadata(path: Path | None) -> dict[str, Any]:
         if not name:
             name = _jats_text(_jats_first(contrib, "collab"))
         if name:
-            authors.append(name)
+            cleaned_name = clean_author_name(name)
+            if cleaned_name:
+                authors.append(cleaned_name)
     result["authors"] = dedupe(authors)
     for article_id in root.iter():
         if article_id.tag.rsplit("}", 1)[-1] == "article-id" and article_id.get("pub-id-type") == "doi":

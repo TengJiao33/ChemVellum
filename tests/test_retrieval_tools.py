@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import contextlib
+import io
 import json
 import sys
 import tempfile
@@ -159,6 +161,61 @@ class RetrievalToolTests(unittest.TestCase):
                 root,
             )
             self.assertEqual(relative, absolute)
+
+    def test_discovery_progress_is_immediate_and_machine_output_safe(self) -> None:
+        stream = io.StringIO()
+        with contextlib.redirect_stderr(stream):
+            self.discovery.progress("Crossref request started")
+        rendered = stream.getvalue()
+        self.assertIn("[discover ", rendered)
+        self.assertIn("Crossref request started", rendered)
+
+    def test_metadata_cleans_jats_inline_spacing_and_footnote_markers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "paper.jats.xml"
+            path.write_text(
+                "<?xml version='1.0' encoding='UTF-8'?>"
+                "<article><front><article-meta><title-group><article-title>"
+                "Minimal <italic>N</italic>-hydroxy bond exchange"
+                "<xref ref-type='fn'>†</xref></article-title></title-group>"
+                "<contrib-group><contrib contrib-type='author'><name>"
+                "<surname>Lovelace</surname><given-names>Ada</given-names>"
+                "</name></contrib></contrib-group>"
+                "<abstract><p>First paragraph.</p><p>Second paragraph.</p></abstract>"
+                "<pub-date><year>2025</year></pub-date>"
+                "</article-meta></front></article>",
+                encoding="utf-8",
+            )
+            result = self.metadata.extract_jats_metadata(path)
+            written = Path(tmp) / "metadata.json"
+            self.metadata.write_json(written, result)
+            round_trip = json.loads(written.read_text(encoding="utf-8"))
+
+        self.assertEqual(result["title"], "Minimal N-hydroxy bond exchange")
+        self.assertEqual(result["authors"], ["Ada Lovelace"])
+        self.assertEqual(result["abstract"], "First paragraph. Second paragraph.")
+        self.assertEqual(round_trip, result)
+
+    def test_metadata_author_extraction_ignores_copyright_statements(self) -> None:
+        blocks = [
+            {"type": "text", "text": "A useful chemistry paper", "text_level": 1},
+            {"type": "text", "text": "Ada Lovelace, Grace Hopper"},
+            {"type": "text", "text": "DOI: 10.1000/example"},
+            {"type": "text", "text": "© The Author(s) 2025"},
+        ]
+        authors = self.metadata.extract_authors(blocks, "A useful chemistry paper")
+        self.assertEqual(authors["value"], ["Ada Lovelace", "Grace Hopper"])
+
+    def test_ingest_jats_text_preserves_inline_markup_adjacency(self) -> None:
+        element = self.ingest.ET.fromstring(
+            "<article-title>Minimal <italic>N</italic>-hydroxy exchange"
+            "<xref ref-type='fn'>†</xref></article-title>"
+        )
+        rendered = self.ingest._xml_text(
+            element,
+            skip_xref_types={"fn"},
+        )
+        self.assertEqual(rendered, "Minimal N-hydroxy exchange")
 
     def test_mineru_writes_latest_and_per_run_manifests(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

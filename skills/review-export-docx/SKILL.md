@@ -20,7 +20,11 @@ python skills/review-export-docx/scripts/md2docx.py \
 
 When `--output` is omitted, the converter uses the manuscript's first
 level-one heading as the DOCX filename. Characters that Windows does not allow
-in filenames are replaced without otherwise shortening the paper title.
+in filenames are replaced. The full title is retained whenever the destination
+path permits it; in a deep project directory it is shortened at a word boundary
+only enough to remain usable by Word and ordinary Windows tools. The filename
+remains title-derived and never falls back to the internal project number merely
+because the path is long. `--output` and `--output-dir` are mutually exclusive.
 
 The converter supports Markdown headings, tables, images, references, inline
 math, chemical subscripts/superscripts, page numbers, and academic styles.

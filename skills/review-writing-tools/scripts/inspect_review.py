@@ -12,7 +12,6 @@ from typing import Any
 STABLE_CITATION_RE = re.compile(
     r"\[((?:@P\d{3,})(?:\s*[;,]\s*@P\d{3,})*)\]"
 )
-IMAGE_RE = re.compile(r"!\[[^\]]*\]\(([^)]+)\)")
 COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
 GENERATED_REFERENCES_RE = re.compile(
     r"\n##\s+References\s*\n<!-- generated-references:start -->.*?"
@@ -45,7 +44,16 @@ ABSTRACT_HEADING_RE = re.compile(
     r"^\s{0,3}(?:#{1,6}\s+|\*\*)Abstract\b",
     re.I | re.M,
 )
-LEGACY_TILDE_SCRIPT_RE = re.compile(r"~[^~\n]+~")
+LEGACY_TILDE_SCRIPT_RE = re.compile(
+    r"(?<=[A-Za-z0-9)\]])~[^~\s]{1,24}~"
+)
+TRAILING_FOOTNOTE_MARKER_RE = re.compile(r"\s*[†‡§¶#]+\s*$")
+COPYRIGHT_AUTHOR_RE = re.compile(
+    r"(?:©|\bcopyright\b|\bthe author\(s\)\b|\ball rights reserved\b|"
+    r"\bcreative commons\b)",
+    re.I,
+)
+INLINE_LETTER_HYPHEN_RE = re.compile(r"\b([NOSP])\s+-\s*(?=[a-z])")
 
 
 def read_json(path: Path) -> Any:
@@ -65,6 +73,80 @@ def stable_ids(text: str) -> list[str]:
             if paper_id not in paper_ids:
                 paper_ids.append(paper_id)
     return paper_ids
+
+
+def projected_stable_ids(manuscript: Path) -> tuple[list[str], Path | None]:
+    """Recover stable IDs for a numbered deliverable from its projection file."""
+    projection_path = manuscript.parent / "citations.json"
+    if not projection_path.is_file():
+        return [], None
+    try:
+        projection = read_json(projection_path)
+    except (OSError, json.JSONDecodeError):
+        return [], None
+    if not isinstance(projection, dict):
+        return [], None
+    projected_output = str(projection.get("output") or "").strip()
+    if projected_output:
+        output_path = Path(projected_output)
+        if not output_path.is_absolute():
+            output_path = projection_path.parent / output_path
+        if output_path.resolve() != manuscript.resolve():
+            return [], None
+    mapping = projection.get("paper_to_number")
+    if not isinstance(mapping, dict):
+        return [], None
+    ordered = sorted(
+        (
+            (str(paper_id), number)
+            for paper_id, number in mapping.items()
+            if re.fullmatch(r"P\d{3,}", str(paper_id))
+            and isinstance(number, int)
+        ),
+        key=lambda item: item[1],
+    )
+    return [paper_id for paper_id, _number in ordered], projection_path
+
+
+def markdown_image_paths(text: str) -> list[str]:
+    """Return image destinations while allowing brackets inside alt text."""
+    paths: list[str] = []
+    cursor = 0
+    while True:
+        marker = text.find("![", cursor)
+        if marker < 0:
+            break
+        index = marker + 2
+        destination_start = -1
+        while index < len(text):
+            if text[index] == "\\":
+                index += 2
+                continue
+            if text[index] == "]" and index + 1 < len(text) and text[index + 1] == "(":
+                destination_start = index + 2
+                break
+            index += 1
+        if destination_start < 0:
+            cursor = marker + 2
+            continue
+        index = destination_start
+        depth = 1
+        while index < len(text):
+            if text[index] == "\\":
+                index += 2
+                continue
+            if text[index] == "(":
+                depth += 1
+            elif text[index] == ")":
+                depth -= 1
+                if depth == 0:
+                    paths.append(text[destination_start:index])
+                    cursor = index + 1
+                    break
+            index += 1
+        else:
+            cursor = marker + 2
+    return paths
 
 
 def resolve_local_path(review_root: Path, raw: Any) -> Path | None:
@@ -163,6 +245,12 @@ def inspect(
     body = GENERATED_REFERENCES_RE.sub("", text)
     visible_body = COMMENT_RE.sub("", body)
     paper_ids = stable_ids(body)
+    citation_provenance = "stable_paper_ids"
+    projection_path: Path | None = None
+    if not paper_ids:
+        paper_ids, projection_path = projected_stable_ids(manuscript)
+        if paper_ids:
+            citation_provenance = "sibling_citation_projection"
     metadata_dir = review_root / "review-library" / "metadata" / "papers"
 
     citations: list[dict[str, Any]] = []
@@ -198,12 +286,24 @@ def inspect(
             metadata_warnings.append(f"{paper_id}: author field includes affiliation text")
         if any(TITLE_LIKE_AUTHOR_RE.search(name) for name in names):
             metadata_warnings.append(f"{paper_id}: author field looks title-like")
+        if any(COPYRIGHT_AUTHOR_RE.search(name) for name in names):
+            metadata_warnings.append(
+                f"{paper_id}: author field includes a copyright statement"
+            )
         for field in ("title", "year"):
             if not unwrap(metadata.get(field)):
                 metadata_warnings.append(f"{paper_id}: missing {field}")
         title = str(unwrap(metadata.get("title")) or "")
         if RAW_LATEX_RE.search(title):
             metadata_warnings.append(f"{paper_id}: title contains raw LaTeX")
+        if TRAILING_FOOTNOTE_MARKER_RE.search(title):
+            metadata_warnings.append(
+                f"{paper_id}: title has a trailing footnote marker"
+            )
+        if INLINE_LETTER_HYPHEN_RE.search(title):
+            metadata_warnings.append(
+                f"{paper_id}: title has inline-markup spacing around a hyphen"
+            )
         citations.append(
             {
                 "paper_id": paper_id,
@@ -215,7 +315,7 @@ def inspect(
 
     image_rows: list[dict[str, Any]] = []
     missing_images: list[str] = []
-    for raw in IMAGE_RE.findall(body):
+    for raw in markdown_image_paths(body):
         path_text = raw.strip().strip("<>")
         if re.match(r"^(?:https?://|data:)", path_text, re.I):
             image_rows.append({"path": path_text, "kind": "remote", "exists": True})
@@ -256,6 +356,8 @@ def inspect(
         "profile": profile,
         "substantive_word_count": words,
         "citation_count": len(paper_ids),
+        "citation_provenance": citation_provenance,
+        "citation_projection": str(projection_path) if projection_path else None,
         "cited_paper_ids": paper_ids,
         "cited_with_local_full_text": full_text_ids,
         "citations": citations,

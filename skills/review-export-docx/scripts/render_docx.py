@@ -21,10 +21,11 @@ def utc_now() -> str:
 
 
 def file_sha256(path: Path) -> str:
-    if not path.is_file():
+    readable = windows_io_path(path)
+    if not readable.is_file():
         return ""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with readable.open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
@@ -35,6 +36,20 @@ def needs_short_working_path(path: Path) -> bool:
     return os.name == "nt" and (
         value.startswith("\\\\?\\") or len(value) >= 240
     )
+
+
+def windows_io_path(path: Path) -> Path:
+    """Return an extended-length Windows path for local file operations."""
+    resolved = str(path.resolve())
+    if os.name != "nt" or resolved.startswith("\\\\?\\"):
+        return Path(resolved)
+    if resolved.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + resolved[2:])
+    return Path("\\\\?\\" + resolved)
+
+
+def path_is_file(path: Path) -> bool:
+    return windows_io_path(path).is_file()
 
 
 def run_command(command: list[str]) -> dict[str, Any]:
@@ -149,12 +164,19 @@ def run(args: argparse.Namespace) -> int:
     )
     report_path = args.report.resolve()
     pages_dir = args.pages_dir.resolve()
-    if not docx.exists():
-        raise SystemExit(f"DOCX not found: {docx}")
+    if not path_is_file(docx):
+        path_note = (
+            f" Path length is {len(str(docx))} characters; this may be a Windows "
+            "long-path access problem."
+            if os.name == "nt" and len(str(docx)) >= 240
+            else ""
+        )
+        raise SystemExit(f"DOCX not found or inaccessible: {docx}.{path_note}")
     if pdf.suffix.lower() != ".pdf":
         raise SystemExit("--output-pdf must name a .pdf file")
-    if pdf.exists():
-        pdf.unlink()
+    pdf_io = windows_io_path(pdf)
+    if pdf_io.exists():
+        pdf_io.unlink()
     temporary_workspace = None
     render_docx = docx
     render_pdf = pdf
@@ -163,7 +185,7 @@ def run(args: argparse.Namespace) -> int:
         working_dir = Path(temporary_workspace.name)
         render_docx = working_dir / "input.docx"
         render_pdf = working_dir / "output.pdf"
-        shutil.copy2(docx, render_docx)
+        shutil.copy2(windows_io_path(docx), render_docx)
     attempts = []
     rendered = False
     renderer = None
@@ -177,7 +199,7 @@ def run(args: argparse.Namespace) -> int:
             break
     if rendered and render_pdf != pdf:
         pdf.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(render_pdf, pdf)
+        shutil.copy2(render_pdf, windows_io_path(pdf))
     page_images: list[str] = []
     raster_report: dict[str, Any] = {"available": False, "error": "render failed"}
     if rendered:
@@ -188,7 +210,7 @@ def run(args: argparse.Namespace) -> int:
         for index, image_path in enumerate(page_images, start=1)
     ]
     mechanical_errors: list[str] = []
-    if not rendered or not pdf.is_file():
+    if not rendered or not path_is_file(pdf):
         mechanical_errors.append("DOCX could not be rendered to PDF")
     if rendered and not page_images:
         mechanical_errors.append("PDF was created but page images could not be rasterized")
@@ -201,7 +223,7 @@ def run(args: argparse.Namespace) -> int:
         "renderer": renderer,
         "input_docx_sha256": file_sha256(docx),
         "output_pdf_sha256": file_sha256(pdf),
-        "pdf_created": rendered and pdf.is_file(),
+        "pdf_created": rendered and path_is_file(pdf),
         "page_images_created": bool(page_images),
         "renderer_attempts": attempts,
         "rasterization": raster_report,

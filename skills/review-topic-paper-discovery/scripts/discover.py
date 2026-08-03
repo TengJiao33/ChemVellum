@@ -16,7 +16,7 @@ import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from create_project import (
     archive_current_discovery,
@@ -28,6 +28,20 @@ from sciatlas_client import SciAtlasClient, load_config, papers_from_response
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def progress(message: str) -> None:
+    """Emit a timestamped, immediately visible progress line.
+
+    Discovery's machine-readable artifacts remain on disk and its short final
+    summary remains on stdout. Long-running provider activity goes to stderr so
+    callers can monitor the process without waiting for completion or parsing a
+    partially written JSON document.
+    """
+    print(f"[discover {utc_now()}] {message}", file=sys.stderr, flush=True)
+
+
+ProgressCallback = Callable[[str], None]
 
 
 def slugify(value: str) -> str:
@@ -1117,6 +1131,7 @@ def crossref_reference_expansion(
     seed_limit: int = 2,
     result_limit: int = 30,
     seed_hints: list[dict[str, Any]] | None = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Find close reviews, expand deposited references, and screen them by topic."""
     if result_limit <= 0:
@@ -1152,6 +1167,10 @@ def crossref_reference_expansion(
             seen_seed_dois.add(doi)
             raw_seed_items.append(item)
     for index, query in enumerate(seed_queries):
+        if progress_callback:
+            progress_callback(
+                f"reference expansion seed search {index + 1}/{len(seed_queries)}: {query}"
+            )
         try:
             items = crossref_search_items(
                 query,
@@ -1160,7 +1179,15 @@ def crossref_reference_expansion(
             )
         except Exception as exc:
             errors.append(f"seed search {query}: {exc}")
+            if progress_callback:
+                progress_callback(
+                    f"reference expansion seed search {index + 1}/{len(seed_queries)} failed: {type(exc).__name__}"
+                )
             continue
+        if progress_callback:
+            progress_callback(
+                f"reference expansion seed search {index + 1}/{len(seed_queries)} returned {len(items)} records"
+            )
         for item in items:
             doi = _normalized_doi(item.get("DOI"))
             if doi and doi not in seen_seed_dois:
@@ -1215,8 +1242,12 @@ def crossref_reference_expansion(
     for candidate in seed_candidates:
         if candidate["guideline_match"] and candidate not in detail_pool:
             detail_pool.append(candidate)
-    for candidate in detail_pool:
+    for detail_index, candidate in enumerate(detail_pool, start=1):
         doi = str(candidate["item"].get("DOI") or "")
+        if progress_callback:
+            progress_callback(
+                f"reference expansion seed detail {detail_index}/{len(detail_pool)}: {doi}"
+            )
         try:
             work = fetch_crossref_work(doi)
         except Exception as exc:
@@ -1296,11 +1327,19 @@ def crossref_reference_expansion(
     # Hydrate the bounded reference pool in batches. This gives DOI-only
     # deposits the same title/OA screen and supplies citation counts for a
     # small high-impact lane alongside the top lexical matches.
+    if progress_callback:
+        progress_callback(
+            f"reference expansion hydrating {min(len(reference_stubs), 300)} deposited references"
+        )
     try:
         hydrated_references = fetch_crossref_works(list(reference_stubs)[:300])
     except Exception as exc:
         errors.append(f"reference batch hydration: {exc}")
         hydrated_references = []
+    if progress_callback:
+        progress_callback(
+            f"reference expansion hydrated {len(hydrated_references)} references"
+        )
     hydrated_by_doi = {
         _normalized_doi(work.get("DOI")): work
         for work in hydrated_references
@@ -1595,6 +1634,7 @@ def enrich_grouped_open_access(
     grouped: list[dict[str, Any]],
     email: str,
     limit: int,
+    progress_callback: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     if not email:
         return {
@@ -1625,6 +1665,11 @@ def enrich_grouped_open_access(
                 if limit > 0 and attempted >= limit:
                     continue
                 attempted += 1
+                if progress_callback and (attempted == 1 or attempted % 5 == 0):
+                    limit_label = str(limit) if limit > 0 else "unbounded"
+                    progress_callback(
+                        f"open-access resolution {attempted}/{limit_label}: {doi}"
+                    )
                 try:
                     cache[doi] = unpaywall_location(doi, email)
                 except Exception as exc:
@@ -2445,6 +2490,7 @@ def run(args: argparse.Namespace) -> int:
     )
     project_id = str(project_manifest["project_id"])
     project = review_root / "review-projects" / project_id
+    progress(f"starting project {project_id}: {topic}")
     archived_discovery = archive_current_discovery(project)
     out_dir = project / "00_discovery"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -2508,6 +2554,11 @@ def run(args: argparse.Namespace) -> int:
     keyword_set = build_keyword_set(topic, user_keywords, topic_contract)
     keyword_set["discovery_run_id"] = discovery_run_id
     write_json(out_dir / "keyword_set.draft.json", keyword_set)
+    progress(
+        "query plan ready: "
+        f"{len(keyword_set['merged_keywords'])} keyword groups, "
+        f"{len(important_coverage)} declared coverage axes"
+    )
     papers = load_metadata(review_root)
     classification_rules = load_classification_rules(review_root, topic)
     local_grouped = local_search_by_keyword(
@@ -2518,6 +2569,8 @@ def run(args: argparse.Namespace) -> int:
         review_root,
     )
     write_json(out_dir / "local_results_by_keyword.json", {"project_id": project_id, "results": local_grouped})
+    local_hits = sum(len(group.get("local_results") or []) for group in local_grouped)
+    progress(f"local library search complete: {len(papers)} registered papers, {local_hits} grouped hits")
     sciatlas_requested = bool(args.sciatlas_search) and not args.local_only
     europe_pmc_requested = (
         not args.local_only and not args.no_europe_pmc_search
@@ -2576,9 +2629,21 @@ def run(args: argparse.Namespace) -> int:
         for name in provider_errors
     }
     queried_groups = choose_external_groups(local_grouped, args.external_query_limit)
-    for group in queried_groups:
+    progress(
+        "external retrieval starting: "
+        f"{len(queried_groups)} planned queries; "
+        f"Europe PMC={'on' if europe_pmc_active else 'off'}, "
+        f"Crossref={'on' if crossref_requested else 'off'}, "
+        f"Semantic Scholar={'on' if semantic_scholar_active else 'off'}, "
+        f"SciAtlas={'on' if sciatlas_client is not None else 'off'}"
+    )
+    for group_index, group in enumerate(queried_groups, start=1):
         rows: list[dict[str, Any]] = []
+        progress(
+            f"external query {group_index}/{len(queried_groups)}: {group['keyword']}"
+        )
         if europe_pmc_active:
+            progress(f"query {group_index}/{len(queried_groups)} Europe PMC request started")
             provider_stats["europe_pmc"]["attempted_queries"] += 1
             raw_europe_pmc_rows = europe_pmc_search(
                 group["keyword"],
@@ -2605,9 +2670,14 @@ def run(args: argparse.Namespace) -> int:
                 sources_used.append("europe_pmc")
             if europe_pmc_errors:
                 europe_pmc_active = False
+            progress(
+                f"query {group_index}/{len(queried_groups)} Europe PMC complete: "
+                f"returned={len(europe_pmc_rows)} errors={len(europe_pmc_errors)}"
+            )
             if args.web_delay:
                 time.sleep(args.web_delay)
         if sciatlas_client is not None:
+            progress(f"query {group_index}/{len(queried_groups)} SciAtlas request started")
             provider_stats["sciatlas"]["attempted_queries"] += 1
             raw_sciatlas_rows = sciatlas_search(
                 sciatlas_client,
@@ -2628,9 +2698,14 @@ def run(args: argparse.Namespace) -> int:
             )
             if any(row.get("keep", True) for row in sciatlas_rows) and "sciatlas" not in sources_used:
                 sources_used.append("sciatlas")
+            progress(
+                f"query {group_index}/{len(queried_groups)} SciAtlas complete: "
+                f"returned={len(sciatlas_rows)} errors={len(sciatlas_errors)}"
+            )
             if args.web_delay:
                 time.sleep(args.web_delay)
         if semantic_scholar_active:
+            progress(f"query {group_index}/{len(queried_groups)} Semantic Scholar request started")
             provider_stats["semantic_scholar"]["attempted_queries"] += 1
             raw_semantic_rows = semantic_scholar_search(
                 group["keyword"],
@@ -2654,9 +2729,14 @@ def run(args: argparse.Namespace) -> int:
                 # remaining keyword calls too. Stop hammering it and let the
                 # independent Crossref path continue.
                 semantic_scholar_active = False
+            progress(
+                f"query {group_index}/{len(queried_groups)} Semantic Scholar complete: "
+                f"returned={len(semantic_rows)} errors={len(semantic_errors)}"
+            )
             if args.web_delay:
                 time.sleep(args.web_delay)
         if crossref_requested:
+            progress(f"query {group_index}/{len(queried_groups)} Crossref request started")
             provider_stats["crossref"]["attempted_queries"] += 1
             raw_crossref_rows = web_search(group["keyword"], topic, args.web_limit)
             crossref_rows, crossref_errors = split_provider_rows(raw_crossref_rows)
@@ -2670,11 +2750,18 @@ def run(args: argparse.Namespace) -> int:
             )
             if any(row.get("keep", True) for row in crossref_rows) and "crossref" not in sources_used:
                 sources_used.append("crossref")
+            progress(
+                f"query {group_index}/{len(queried_groups)} Crossref complete: "
+                f"returned={len(crossref_rows)} errors={len(crossref_errors)}"
+            )
             if args.web_delay:
                 time.sleep(args.web_delay)
         merged = annotate_external_results(merge_external_results(rows), papers)
         if merged:
             external_grouped.append({"keyword": group["keyword"], "web_results": merged})
+        progress(
+            f"external query {group_index}/{len(queried_groups)} merged: {len(merged)} unique candidates"
+        )
 
     reference_expansion: dict[str, Any] = {
         "status": "disabled",
@@ -2684,6 +2771,7 @@ def run(args: argparse.Namespace) -> int:
         "errors": [],
     }
     if crossref_requested and args.reference_expansion_limit > 0:
+        progress("reference expansion starting")
         seed_hints = review_seed_hints_from_grouped(external_grouped)
         reference_expansion = crossref_reference_expansion(
             topic,
@@ -2691,6 +2779,7 @@ def run(args: argparse.Namespace) -> int:
             seed_limit=args.review_seed_limit,
             result_limit=args.reference_expansion_limit,
             seed_hints=seed_hints,
+            progress_callback=progress,
         )
         expansion_rows = annotate_external_results(
             reference_expansion.get("results") or [],
@@ -2707,14 +2796,27 @@ def run(args: argparse.Namespace) -> int:
             )
             if "crossref_reference_expansion" not in sources_used:
                 sources_used.append("crossref_reference_expansion")
+        progress(
+            "reference expansion complete: "
+            f"status={reference_expansion.get('status')} "
+            f"retained={len(expansion_rows)}"
+        )
     unpaywall_email = (
         args.unpaywall_email
         or os.environ.get("UNPAYWALL_EMAIL", "")
     )
+    progress("open-access resolution starting")
     oa_resolution = enrich_grouped_open_access(
         external_grouped,
         unpaywall_email,
         args.oa_resolution_limit,
+        progress_callback=progress,
+    )
+    progress(
+        "open-access resolution complete: "
+        f"status={oa_resolution.get('status')} "
+        f"attempted={oa_resolution.get('attempted')} "
+        f"resolved={oa_resolution.get('resolved')}"
     )
     write_json(out_dir / "reference_expansion.json", reference_expansion)
 
@@ -2823,6 +2925,11 @@ def run(args: argparse.Namespace) -> int:
             topic_contract,
             ingest_plan,
         ),
+    )
+    progress(
+        "writing discovery artifacts complete: "
+        f"{len(selected.get('web_papers') or [])} external candidates, "
+        f"{len(selected.get('local_papers') or [])} local candidates"
     )
     write_report(out_dir, topic, keyword_set, combined)
     cleanup_discovery_marker()

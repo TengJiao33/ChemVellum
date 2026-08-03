@@ -233,6 +233,12 @@ only for broken local mechanics such as an unknown stable paper ID or a missing
 local image. Length, visual density, table use, balance, and synthesis remain
 editorial observations.
 
+Prefer the canonical stable-ID manuscript for this inspection. A numbered
+`deliverables/review.md` is also supported when its sibling `citations.json`
+identifies that exact output; the inspector recovers the underlying paper IDs
+from that deterministic projection instead of treating numbered references as
+an empty evidence base.
+
 The default snapshot omits a word target. Add `--include-word-advisory` when the
 user asks for a length reference or after the first mature draft of a broad
 full-length review. Use the evidence-scaled range to notice serious compression,

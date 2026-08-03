@@ -545,10 +545,32 @@ def europe_pmc_article_url(doi: Any, timeout: int) -> str:
     raise ValueError("Europe PMC has no matching open full-text record")
 
 
-def _xml_text(element: ET.Element | None) -> str:
+def _xml_text(
+    element: ET.Element | None,
+    *,
+    skip_xref_types: set[str] | None = None,
+) -> str:
     if element is None:
         return ""
-    return re.sub(r"\s+", " ", " ".join(element.itertext())).strip()
+    skipped = skip_xref_types or set()
+    parts: list[str] = []
+
+    def visit(node: ET.Element) -> None:
+        if node.text:
+            parts.append(node.text)
+        for child in list(node):
+            local_name = child.tag.rsplit("}", 1)[-1]
+            skip_child = (
+                local_name == "xref"
+                and str(child.get("ref-type") or "").lower() in skipped
+            )
+            if not skip_child:
+                visit(child)
+            if child.tail:
+                parts.append(child.tail)
+
+    visit(element)
+    return re.sub(r"\s+", " ", "".join(parts)).strip()
 
 
 def _first_xml_element(root: ET.Element, local_name: str) -> ET.Element | None:
@@ -601,7 +623,12 @@ def download_europe_pmc_jats(
     except Exception:
         article_images = {}
 
-    title = _xml_text(_first_xml_element(root, "article-title")) or slug.replace("-", " ")
+    title = _xml_text(
+        _first_xml_element(root, "article-title"),
+        skip_xref_types={"fn", "author-notes", "corresp"},
+    ) or slug.replace("-", " ")
+    title = re.sub(r"\b([NOSP])\s+-\s*(?=[a-z])", r"\1-", title)
+    title = re.sub(r"\s*[†‡§¶#]+\s*$", "", title).strip()
     doi = ""
     for article_id in root.iter():
         if article_id.tag.rsplit("}", 1)[-1] == "article-id" and article_id.get("pub-id-type") == "doi":

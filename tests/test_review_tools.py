@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import base64
+import contextlib
+import io
 import json
 import os
 import sys
@@ -163,6 +165,40 @@ class ReviewToolTests(unittest.TestCase):
         report = module.inspect(self.root, manuscript, "focused")
         self.assertIn("unknown stable citation: P999", report["mechanical_errors"])
         self.assertIn("missing local image: missing.png", report["mechanical_errors"])
+
+    def test_inspector_reads_escaped_image_captions_and_numbered_projection(self) -> None:
+        module = load_module("inspect_review_projected", INSPECT)
+        self.add_paper("P001")
+        deliverables = self.root / "deliverables"
+        assets = deliverables / "assets"
+        assets.mkdir(parents=True)
+        (assets / "figure.png").write_bytes(b"image")
+        review = deliverables / "review.md"
+        review.write_text(
+            "# Review\n\n## Abstract\n\nA bounded synthesis [1].\n\n"
+            r"![Figure 1. Thermal window [1\].](assets/figure.png)" + "\n",
+            encoding="utf-8",
+        )
+        write_json(
+            deliverables / "citations.json",
+            {
+                "output": str(review.resolve()),
+                "paper_to_number": {"P001": 1},
+            },
+        )
+
+        report = module.inspect(
+            self.root,
+            review,
+            "comprehensive",
+            include_word_advisory=True,
+        )
+
+        self.assertEqual(report["citation_count"], 1)
+        self.assertEqual(report["citation_provenance"], "sibling_citation_projection")
+        self.assertEqual(report["image_count"], 1)
+        self.assertEqual(report["mechanical_errors"], [])
+        self.assertEqual(report["word_advisory"]["usable_source_count"], 1)
 
     def test_library_search_uses_full_text(self) -> None:
         module = load_module("search_library_fulltext", SEARCH)
@@ -328,6 +364,38 @@ class ReviewToolTests(unittest.TestCase):
         self.assertNotIn("<sub>", rendered)
         self.assertNotIn("<i>", rendered)
 
+    def test_reference_formatter_avoids_double_terminal_punctuation(self) -> None:
+        module = load_module("merge_citations_punctuation", MERGE)
+        metadata = {
+            "authors": [f"Author {index}" for index in range(1, 8)],
+            "title": "Are Associative Exchange Mechanisms Desirable?",
+            "journal": "ACS Central Science",
+            "year": 2020,
+            "doi": "10.1000/example",
+        }
+        rendered, issues = module.format_reference(1, "P001", metadata)
+        self.assertEqual(issues, [])
+        self.assertIn("et al. Are Associative Exchange Mechanisms Desirable?", rendered)
+        self.assertNotIn("et al..", rendered)
+        self.assertNotIn("?.", rendered)
+
+    def test_reference_formatter_surfaces_and_cleans_metadata_artifacts(self) -> None:
+        module = load_module("merge_citations_artifacts", MERGE)
+        metadata = {
+            "authors": ["Ada Lovelace", "© The Author(s) 2025"],
+            "title": "Minimal N -hydroxy bond exchange†",
+            "journal": "Polymer Chemistry",
+            "year": 2025,
+            "doi": "10.1000/example",
+        }
+        rendered, issues = module.format_reference(1, "P001", metadata)
+        self.assertIn("authors_include_copyright_statement", issues)
+        self.assertIn("title_has_trailing_footnote_marker", issues)
+        self.assertIn("title_has_inline_markup_spacing", issues)
+        self.assertIn("Ada Lovelace. Minimal N-hydroxy bond exchange.", rendered)
+        self.assertNotIn("©", rendered)
+        self.assertNotIn("†", rendered)
+
     def test_assets_survive_citation_merge_and_docx_export(self) -> None:
         insert_module = load_module("insert_assets_e2e", INSERT)
         merge_module = load_module("merge_citations_e2e", MERGE)
@@ -466,6 +534,23 @@ class ReviewToolTests(unittest.TestCase):
         self.assertIn("no Abstract heading was found", observations)
         self.assertTrue(any("legacy ~...~" in item for item in observations))
         self.assertEqual(report["mechanical_errors"], [])
+
+        approximate = self.root / "approximate.md"
+        approximate.write_text(
+            "# Review\n\n## Abstract\n\nValues span ~25-160 units and approach ~200 units.\n",
+            encoding="utf-8",
+        )
+        approximate_report = module.inspect(
+            self.root,
+            approximate,
+            "comprehensive",
+        )
+        self.assertFalse(
+            any(
+                "legacy ~...~" in item
+                for item in approximate_report["editorial_observations"]
+            )
+        )
 
     def test_strict_metadata_is_optional_and_transparent(self) -> None:
         module = load_module("merge_citations_strict", MERGE)
@@ -778,6 +863,33 @@ class ReviewToolTests(unittest.TestCase):
         writable = module._writable_path(self.root / ("long-" + "x" * 220 + ".docx"))
         if sys.platform == "win32":
             self.assertTrue(writable.startswith("\\\\?\\"))
+
+    def test_docx_title_filename_respects_destination_path_budget(self) -> None:
+        module = load_module("md2docx_title_path_budget", MD2DOCX)
+        output_dir = self.root / ("deep-" + "x" * 80)
+        title = (
+            "Dynamic Covalent Chemistry in Covalent Adaptive Networks: How Bond "
+            "Exchange Mechanisms and Processing Conditions Determine Recyclability"
+        )
+        stem = module.document_filename_stem(title, output_dir=output_dir)
+        output = output_dir.resolve() / f"{stem}.docx"
+        self.assertLessEqual(len(str(output)), 240)
+        self.assertTrue(stem.startswith("Dynamic Covalent Chemistry"))
+        self.assertTrue(stem.endswith("Recyclability"))
+        self.assertIn(" ... ", stem)
+        self.assertNotIn("CVR-", stem)
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                module._build_parser().parse_args(
+                    [
+                        "--input",
+                        "review.md",
+                        "--output",
+                        "review.docx",
+                        "--output-dir",
+                        "deliverables",
+                    ]
+                )
 
     def test_docx_table_uses_white_three_line_borders(self) -> None:
         from docx import Document

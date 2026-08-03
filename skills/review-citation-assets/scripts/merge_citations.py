@@ -39,6 +39,13 @@ TITLE_LIKE_AUTHOR_RE = re.compile(
 RAW_LATEX_RE = re.compile(
     r"\\(?:ce|mathsf|mathrm|text|mathbf|operatorname)\s*\{"
 )
+TRAILING_FOOTNOTE_MARKER_RE = re.compile(r"\s*[†‡§¶#]+\s*$")
+COPYRIGHT_AUTHOR_RE = re.compile(
+    r"(?:©|\bcopyright\b|\bthe author\(s\)\b|\ball rights reserved\b|"
+    r"\bcreative commons\b)",
+    re.I,
+)
+INLINE_LETTER_HYPHEN_RE = re.compile(r"\b([NOSP])\s+-\s*(?=[a-z])")
 HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
 MARKDOWN_IMAGE_RE = re.compile(
     r"(!\[(?:\\.|[^\]])*\]\()([^)]+)(\))"
@@ -155,11 +162,20 @@ def author_names(value: Any) -> tuple[list[str], bool]:
     return names, placeholder
 
 
+def sentence_fragment(text: str) -> str:
+    text = text.strip()
+    return text if text.endswith((".", "?", "!")) else f"{text}."
+
+
 def format_reference(
     number: int, paper_id: str, metadata: dict[str, Any]
 ) -> tuple[str, list[str]]:
     issues: list[str] = []
     names, placeholder = author_names(metadata.get("authors"))
+    if any(COPYRIGHT_AUTHOR_RE.search(name) for name in names):
+        issues.append("authors_include_copyright_statement")
+        names = [name for name in names if not COPYRIGHT_AUTHOR_RE.search(name)]
+        placeholder = not names
     if placeholder:
         issues.append("authors_missing_or_placeholder")
         authors = "[authors unavailable]"
@@ -171,7 +187,13 @@ def format_reference(
         issues.append("authors_include_affiliation_text")
     if names and any(TITLE_LIKE_AUTHOR_RE.search(name) for name in names):
         issues.append("authors_look_title_like")
-    title = plain_reference_text(metadata.get("title")).rstrip(".")
+    title = plain_reference_text(metadata.get("title"))
+    if TRAILING_FOOTNOTE_MARKER_RE.search(title):
+        issues.append("title_has_trailing_footnote_marker")
+        title = TRAILING_FOOTNOTE_MARKER_RE.sub("", title).strip()
+    if INLINE_LETTER_HYPHEN_RE.search(title):
+        issues.append("title_has_inline_markup_spacing")
+        title = INLINE_LETTER_HYPHEN_RE.sub(r"\1-", title)
     journal = plain_reference_text(metadata.get("journal")).rstrip(".")
     year = str(unwrap(metadata.get("year")) or "").strip()
     doi = str(unwrap(metadata.get("doi")) or "").strip()
@@ -184,7 +206,9 @@ def format_reference(
         issues.append("journal_missing")
     if not year:
         issues.append("year_missing")
-    pieces = [f"{number}. {authors}. {title}."]
+    pieces = [
+        f"{number}. {sentence_fragment(authors)} {sentence_fragment(title)}"
+    ]
     if journal:
         pieces.append(f"*{journal}*.")
     if year:

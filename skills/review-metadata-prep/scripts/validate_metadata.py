@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,13 @@ from typing import Any
 
 BLOCKING_FIELDS = ["paper_id", "slug", "title", "authors", "year", "abstract", "source_paths"]
 WARNING_FIELDS = ["journal", "doi"]
+TRAILING_FOOTNOTE_MARKER_RE = re.compile(r"\s*[†‡§¶#]+\s*$")
+COPYRIGHT_AUTHOR_RE = re.compile(
+    r"(?:©|\bcopyright\b|\bthe author\(s\)\b|\ball rights reserved\b|"
+    r"\bcreative commons\b)",
+    re.I,
+)
+INLINE_LETTER_HYPHEN_RE = re.compile(r"\b([NOSP])\s+-\s*(?=[a-z])")
 STRUCTURED_TAG_KEYS = [
     "product",
     "substrate",
@@ -117,6 +125,18 @@ def validate_one(
     title = meta.get("title")
     if not isinstance(title, dict) or not has_value(title.get("value")):
         issues.append("missing_title_value")
+    title_value = str(field_value(meta, "title") or "")
+    if TRAILING_FOOTNOTE_MARKER_RE.search(title_value):
+        warnings.append("title_has_trailing_footnote_marker")
+    if INLINE_LETTER_HYPHEN_RE.search(title_value):
+        warnings.append("title_has_inline_markup_spacing")
+    authors = field_value(meta, "authors") or []
+    if isinstance(authors, str):
+        authors = [authors]
+    if isinstance(authors, list) and any(
+        COPYRIGHT_AUTHOR_RE.search(str(author)) for author in authors
+    ):
+        warnings.append("authors_include_copyright_statement")
     structured = meta.get("structured_tags")
     structured_value = structured.get("value") if isinstance(structured, dict) else None
     if isinstance(structured_value, dict) and allowed_labels:
