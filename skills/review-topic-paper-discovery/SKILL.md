@@ -8,9 +8,10 @@ description: Create a numbered ChemVellum review or experiment workspace, search
 Use this tool for the retrieval and corpus-building loop:
 
 ```text
-topic query -> local and external candidates -> lawful full text
--> set-level corpus design -> PDF download or repository import
--> MinerU when needed -> local library -> later gap filling
+topic question and provisional explanation -> local and external candidates
+-> set-level corpus design -> lawful full text -> PDF download or repository import
+-> MinerU when needed -> local library -> reading revises the explanation
+-> targeted retrieval where the explanation remains uncertain
 ```
 
 The model supplies the topic and decides relevance. The scripts handle provider
@@ -39,8 +40,9 @@ python skills/review-topic-paper-discovery/scripts/create_project.py \
 
 New reviews use `CVR-0001-<topic>`, `CVR-0002-<topic>`, and so on. The project
 contains `project.json`, `00_discovery/`, `manuscript.md`, `assets/`,
-`deliverables/`, `notes/`, and `runs/`. Use an explicit `--project-id` only to continue a
-known project or to import a deliberately assigned safe ID.
+`deliverables/`, `notes/synthesis_model.md`, `notes/`, and `runs/`. Use an
+explicit `--project-id` only to continue a known project or to import a
+deliberately assigned safe ID.
 
 Allocate an isolated local experiment with:
 
@@ -62,6 +64,18 @@ python skills/review-topic-paper-discovery/scripts/discover.py \
   --topic-contract-file <topic.md-or-json>
 ```
 
+Discovery is deliberately long-running when the topic expands into dozens of
+facet queries. Launch it once with a command timeout long enough for the whole
+plan—normally 45 to 60 minutes, or longer for slow providers—or as one tracked
+background job whose terminal output remains observable. The script emits
+timestamped, flushed progress lines for every query and major expansion step.
+While those lines continue, monitor the same process; do not terminate it at an
+ordinary short-command timeout and restart from query 1. Before retrying after a
+wrapper timeout, verify whether the original PID is still alive. The script
+refuses a second discovery process for the same project, recovers a stale lock
+after a killed process, and marks the superseded run `interrupted`. Do not reduce
+the scientific query plan merely to fit a tool's default timeout.
+
 Omitting `--project-id` allocates the next `CVR-*` project. To continue an
 existing review, pass its exact ID. Before a repeated discovery run writes the
 canonical `00_discovery/` directory, ChemVellum moves the previous batch to
@@ -82,22 +96,18 @@ needed; it is not a paper-count target.
 Treat the first ingested set as an orientation and working set. Read across
 relevant reviews, anchor studies, and primary papers to learn the field's terms,
 method families, historical links, disagreements, and meaningful comparisons.
-Use that understanding to choose the next searches in the same project.
-Use category labels to see where discovery has reached, and use direct
-full-text support to judge whether the literature can carry the synthesis.
+Use that understanding to revise the project's living synthesis model and
+choose the next searches in the same project. Use category labels to see where
+discovery has reached, and use direct full-text support to judge whether the
+literature can establish, distinguish, or bound the relationships carrying the
+explanation.
 
-Develop each central claim and major comparison from the direct primary sources
-needed to understand its important sides, variations, or historical change.
-Treat the literature set as mature when targeted searches mainly return
-approaches and evidence already understood. Judge support and redundancy rather
-than aiming for a paper count or ingesting every candidate.
-
-For a broad, comprehensive review, roughly 40 genuinely relevant cited sources
-is a useful scale cue. If the emerging set remains well below that scale,
-revisit the main approaches, comparisons, historical links, and representative
-developments before concluding that it is mature. Let relevance and contribution
-decide every ingestion and citation; narrower topics may settle below this scale,
-while broader ones may need more.
+Develop each consequential relationship and comparison from the direct primary
+sources needed to understand its important sides, conditions, competing
+interpretations, and historical change. Let the literature set settle when
+targeted searches mainly return relationships and evidence already understood.
+Judge explanatory change, support, and redundancy rather than aiming for a
+paper count or ingesting every candidate.
 
 For an established subject, use close reviews to navigate backward to the
 primary work that established a method and forward to later papers that changed
@@ -120,11 +130,12 @@ set, then populate `selection.selected_paper_keys`, a concise
 
 Do not select papers merely because they appear first, are easiest to acquire,
 or fit a convenient batch size. Assemble a coherent initial reading corpus
-that spans the reader question: orientation reviews, direct primary evidence,
-meaningful comparisons, historical changes, competing explanations, and scope
-boundaries. Prefer high recall at ingestion for lawful, clearly relevant full
-text because the managed library is cumulative; reserve strict citation
-selection for after reading.
+whose sources can orient the provisional explanation, establish or discriminate
+its important relationships, reveal historical changes or competing
+interpretations, and locate scope boundaries. These are ways a source can
+change understanding, not roles to fill. Prefer high recall at ingestion for
+lawful, clearly relevant full text because the managed library is cumulative;
+reserve strict citation selection for after reading.
 
 The corpus plan is the model's scientific screening decision, not an automatic
 ranking verdict or a paper quota. If the candidate set cannot support the
@@ -165,10 +176,11 @@ material.
 
 Use `--download-only` to defer parsing. Broaden or reformulate queries, expand
 references, or use another provider as reading changes the apparent structure
-of the subject. Let the literature set grow with the understanding needed for
-the review. Give priority to a missing primary source, a weakly supported
-comparison, a historical change, or evidence that could alter the emerging
-account. If the available evidence supports a narrower story, narrow the story.
+of the subject. Let the literature set grow when doing so could change, test, or
+bound the current explanation. Give priority to a missing primary source, an
+unresolved comparison, a historical change, or evidence that could distinguish
+competing relationships. If the available evidence supports a narrower model,
+narrow the story.
 
 ## Selection
 
@@ -179,5 +191,5 @@ Open the current local full text before relying on a paper;
 search snippets, abstracts, earlier summaries, and remembered readings support
 screening but do not replace that reading step. Ingestion makes a paper
 available for reading; it does not create a reason to cite it. Cite a paper when
-it contributes evidence, a comparison, a historical link, or a view discussed
-in the manuscript.
+it establishes, tests, changes, bounds, or materially supports a relationship
+discussed in the manuscript.

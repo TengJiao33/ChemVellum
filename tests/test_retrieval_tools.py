@@ -91,8 +91,28 @@ class RetrievalToolTests(unittest.TestCase):
             project = root / "review-projects" / first["project_id"]
             self.assertTrue((project / "project.json").exists())
             self.assertTrue((project / "manuscript.md").exists())
+            synthesis_model = project / "notes" / "synthesis_model.md"
+            self.assertTrue(synthesis_model.exists())
+            self.assertEqual(
+                first["paths"]["synthesis_model"],
+                "notes/synthesis_model.md",
+            )
+            model_text = synthesis_model.read_text(encoding="utf-8")
+            self.assertIn("# Synthesis Model", model_text)
+            self.assertIn(first["topic"], model_text)
             for directory in ("00_discovery", "assets", "deliverables", "notes", "runs"):
                 self.assertTrue((project / directory).is_dir())
+
+            synthesis_model.write_text("# Preserved model\n", encoding="utf-8")
+            self.projects.ensure_review_project(
+                root,
+                first["topic"],
+                project_id=first["project_id"],
+            )
+            self.assertEqual(
+                synthesis_model.read_text(encoding="utf-8"),
+                "# Preserved model\n",
+            )
 
     def test_project_allocator_rejects_escaping_ids_and_releases_its_lock(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -169,6 +189,66 @@ class RetrievalToolTests(unittest.TestCase):
         rendered = stream.getvalue()
         self.assertIn("[discover ", rendered)
         self.assertIn("Crossref request started", rendered)
+
+    def test_discovery_process_lock_refuses_live_owner_and_recovers_stale_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            project = Path(tmp) / "CVR-0001-test"
+            project.mkdir()
+            lock_path = self.discovery.acquire_discovery_process_lock(
+                project,
+                "CVR-0001-test",
+            )
+            with self.assertRaisesRegex(RuntimeError, "already running"):
+                self.discovery.acquire_discovery_process_lock(
+                    project,
+                    "CVR-0001-test",
+                )
+            self.discovery.release_discovery_process_lock(lock_path)
+
+            lock_path.write_text(
+                json.dumps({"project_id": "CVR-0001-test", "pid": 99999999}),
+                encoding="utf-8",
+            )
+            recovered = self.discovery.acquire_discovery_process_lock(
+                project,
+                "CVR-0001-test",
+            )
+            self.assertEqual(recovered, lock_path)
+            self.discovery.release_discovery_process_lock(recovered)
+            self.assertFalse(lock_path.exists())
+
+    def test_interrupted_discovery_run_is_a_terminal_manifest_record(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = self.projects.ensure_review_project(root, "A review topic")
+            project = root / "review-projects" / manifest["project_id"]
+            run_id = "20260803T010203000000Z-123"
+            next_run_id = "20260803T020304000000Z-456"
+            self.projects.record_discovery_run(
+                project,
+                run_id,
+                "A review topic",
+                "in_progress",
+            )
+            updated = self.projects.record_discovery_run(
+                project,
+                next_run_id,
+                "A review topic",
+                "in_progress",
+            )
+            record = next(
+                row
+                for row in updated["discovery_runs"]
+                if row["discovery_run_id"] == run_id
+            )
+            self.assertEqual(record["status"], "interrupted")
+            self.assertTrue(record["finished_at"])
+            current = next(
+                row
+                for row in updated["discovery_runs"]
+                if row["discovery_run_id"] == next_run_id
+            )
+            self.assertEqual(current["status"], "in_progress")
 
     def test_metadata_cleans_jats_inline_spacing_and_footnote_markers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

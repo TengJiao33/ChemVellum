@@ -27,8 +27,9 @@ or ask whether to continue after planning, discovery, a draft, citation work,
 or DOCX creation.
 
 Create or continue the correctly numbered project and keep its canonical
-manuscript, assets, deliverables, and run outputs inside that project. Preserve
-existing projects. Give concise progress updates while continuing to work.
+manuscript, living synthesis model, assets, deliverables, and run outputs inside
+that project. Preserve existing projects. Give concise progress updates while
+continuing to work.
 
 Unless the user explicitly asks for a focused or mini-review, treat a broad
 chemistry topic as a request for a full-length review at the scale supported by
@@ -59,7 +60,9 @@ Before using a component, read its `SKILL.md` completely and follow its source
 and decision boundaries:
 
 - `review-topic-paper-discovery` creates projects, discovers literature, and
-  acquires lawful full text.
+  acquires lawful full text. Treat its broad external discovery as a tracked
+  long-running command: allow a suitable timeout, monitor its flushed progress,
+  and never start a second process for the same project while the first lives.
 - `mineru-precise-parse-chemvellum` parses acquired PDFs. Do not send
   repository-native structured JATS through MinerU.
 - `review-metadata-prep` registers parsed or imported sources in the managed
@@ -76,36 +79,49 @@ and decision boundaries:
 This Skill owns continuation and routing, not the scientific conclusions. Do
 not duplicate the component instructions here and do not create an additional
 stage machine, evidence matrix, quota report, approval file, or project-local
-orchestration script.
+orchestration script. `notes/synthesis_model.md` is the one living scientific
+account shared by reading, writing, and visual reasoning; it is not a checklist,
+completion record, or parallel manuscript.
 
 ## Work in connected loops
 
-Start with a reader question, scope, provisional central judgment, and
-comparison axes. After broad discovery, use the discovery Skill's corpus-plan
-workflow to choose the initial literature as a set before ingestion. Do not
-build a broad review from an arbitrary first batch of paper keys, and do not
-confuse a download or MinerU batch size with the intended scientific corpus.
-Ingest lawful, clearly relevant full text with high recall so the cumulative
-local library and reserve candidate pool can support later gap filling.
+Start with a reader question, scope, and provisional explanation in
+`notes/synthesis_model.md`. Express the causal, conditional, comparative, and
+competing relationships that currently organize the answer. Keep this model
+revisable: it represents the best current scientific understanding, not an
+outline to fill.
 
-Use an initial reading set to understand the field before sustained drafting.
-Read orientation reviews to learn the map, then promote and open the direct
-primary studies needed across the planned comparisons, disagreements, and
-boundaries. Once registered sources are available, build and browse the source-
-figure inventory during reading, before sustained drafting. Reopen the retained
-candidate pool or discovery whenever reading or writing exposes a missing
-primary source, historical link, comparison, contradiction, mechanism, or
-boundary. Reopen the manuscript structure when evidence changes the central
-judgment. Choose figures, Schemes, and tables while the argument is forming,
-not as decoration after the prose is finished.
+After broad discovery, use the discovery Skill's corpus-plan workflow to choose
+the initial literature as a set before ingestion. Prefer sources that can
+orient, establish, distinguish, revise, or bound an important relationship in
+the model. Do not build a broad review from an arbitrary first batch of paper
+keys, and do not confuse a download or MinerU batch size with the intended
+scientific corpus. Ingest lawful, clearly relevant full text with high recall
+so the cumulative local library and reserve candidate pool can support later
+questions.
 
-For a broad full-length review, write a coherent synthesis draft and then make
-one substantive expansion pass before citation assembly or export. Use that
-pass to deepen the comparisons, mechanisms, representative cases, boundaries,
-and visual explanations that the first draft compressed, reopening full text
-and the retained candidate pool where needed. This is one whole-manuscript
-editorial pass, not a new stage machine, a section-by-section gate, or an
-invitation to repeat or pad prose.
+Read orientation reviews to learn the field, then open the direct primary
+studies that test the relationships carrying the central explanation. When a
+source changes an explanation, its conditions, or its boundary, update the
+synthesis model and reconsider the manuscript structure. When it merely repeats
+an already understood relationship, use it only when the repetition itself
+matters. Reopen the retained candidate pool or discovery when an uncertainty
+could materially change the model. Let targeted reading settle when additional
+sources mainly reinforce relationships already understood.
+
+Develop the manuscript continuously as the reader-facing expression of the
+synthesis model. Give a relationship enough space to establish the observation,
+discriminating comparison, chemical explanation, boundary, and implication that
+matter; compress genuinely redundant examples. A broad review becomes long
+because its explanation contains consequential distinctions and interactions,
+not because a later pass pads a compact draft. If the declared title promises
+relationships that the evidence cannot resolve, narrow the claim or scope.
+
+Build and browse the source-figure inventory during this same loop. Use prose,
+a source visual, an original high-level diagram, or an aligned table according
+to which form most clearly exposes a relationship in the model. Choose these
+views while the explanation is forming, not as decoration after the prose is
+finished and not to reach a count.
 
 Route each acquired source by format:
 
@@ -128,32 +144,28 @@ Keep abstract screening distinct from full-text reading in both the work and
 the completion report; resolving a citation to a local file does not prove that
 the paper was read.
 
-For a broad comprehensive review, roughly 40 genuinely relevant cited sources
-is a scale cue, not a quota. When the bibliography is much smaller, reassess the
-main approaches, historical links, representative developments, comparisons,
-and contrary evidence before concluding that the set is mature.
-
-After the first mature draft of a broad review, run the writing Skill's
-manuscript inspection with `--include-word-advisory`. Treat its evidence-scaled
-range as a diagnostic for serious compression, never as a target or release
-gate. When the draft is plainly out of proportion to the opened evidence and
-declared scope, expand the science once or explicitly narrow the scope instead
-of exporting a mini-review under a comprehensive title.
+Do not use bibliography size, word count, page count, paragraph count, figure
+count, or table count to decide scientific maturity. Use the writing Skill's
+manuscript inspection for mechanical observations, not as the engine of scale.
+Judge maturity by explanatory saturation: further targeted reading no longer
+changes the important relationships, competing explanations are distinguished
+as far as the evidence permits, and the manuscript preserves the conditions and
+boundaries needed for the reader to reconstruct the central explanation.
 
 An empty figure inventory after source registration is a path or identity
 problem to investigate, not evidence that the papers contain no usable images.
-A broad manuscript with no argument-bearing source visual and only a token
-table is presumptively unfinished: either integrate visuals that answer defined
-reader questions or establish from the actual sources why no such visual is
-appropriate. Do not add decorative figures or filler tables to satisfy a count.
+If the synthesis model contains a mechanism, comparison, time course, decision
+space, or boundary that prose would make the reader reconstruct, express it in
+the useful visual form supported by the sources. Do not add decorative figures
+or filler tables.
 
 ## Complete the deliverable
 
 Before export, require an evidence-bounded central judgment, sections that
 advance that judgment, meaningful cross-paper comparison, calibrated chemical
-claims, resolved stable citations, and selected assets already integrated into
-the English manuscript. Run citation and asset insertion rather than cancelling
-it and exporting the unprocessed draft.
+claims, resolved stable citations, and a manuscript whose prose and visuals
+faithfully express the current synthesis model. Run citation and asset insertion
+rather than cancelling it and exporting the unprocessed draft.
 
 Use the default `chemvellum_journal` layout unless the user explicitly requests
 another profile. Render the DOCX to PDF immediately, open every page image, and
@@ -179,15 +191,17 @@ and maintained reports that all of the following are true:
 - the initial corpus was screened as a set rather than inherited from an
   arbitrary retrieval batch, and later evidence gaps were filled from the
   retained candidates or another discovery pass;
+- the living synthesis model records the current explanation and changed as
+  consequential evidence revised its relationships, conditions, or boundaries;
 - the manuscript uses resolved stable paper-ID citations rather than a manually
   invented numbered bibliography;
-- source-figure inventory and selection were actually considered, and useful
-  argument-bearing visuals are integrated unless the opened sources establish
-  why none is suitable;
+- source-figure inventory and selection were considered as alternative views of
+  the same explanation, and the chosen prose, figures, Schemes, and tables are
+  consistent with that model;
 - the final DOCX, PDF, and page images exist; and
 - every rendered page was opened and inspected after the latest export.
 
-These are existence and provenance checks, not fixed literature or figure
-quotas. If any item is absent, the run is still in progress or is explicitly
-blocked. Directory creation, a long manuscript, a reference count, successful
-export, or a completed Todo list cannot substitute for these facts.
+These are existence, provenance, and coherence checks, not fixed literature or
+figure quotas. If any item is absent, the run is still in progress or is
+explicitly blocked. Directory creation, a long manuscript, a reference count,
+successful export, or a completed Todo list cannot substitute for these facts.

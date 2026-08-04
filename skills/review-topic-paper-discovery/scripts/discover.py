@@ -62,6 +62,104 @@ def write_json(path: Path, data: Any) -> None:
     tmp.replace(path)
 
 
+def process_is_running(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+
+        process_query_limited_information = 0x1000
+        still_active = 259
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [
+            ctypes.c_ulong,
+            ctypes.c_int,
+            ctypes.c_ulong,
+        ]
+        kernel32.OpenProcess.restype = ctypes.c_void_p
+        kernel32.GetExitCodeProcess.argtypes = [
+            ctypes.c_void_p,
+            ctypes.POINTER(ctypes.c_ulong),
+        ]
+        kernel32.GetExitCodeProcess.restype = ctypes.c_int
+        kernel32.CloseHandle.argtypes = [ctypes.c_void_p]
+        kernel32.CloseHandle.restype = ctypes.c_int
+        handle = kernel32.OpenProcess(
+            process_query_limited_information,
+            False,
+            pid,
+        )
+        if not handle:
+            return ctypes.get_last_error() == 5
+        try:
+            exit_code = ctypes.c_ulong()
+            if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+                return False
+            return exit_code.value == still_active
+        finally:
+            kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def acquire_discovery_process_lock(project: Path, project_id: str) -> Path:
+    """Prevent two discovery processes from mutating one project at once."""
+    lock_path = project / ".discovery_process.json"
+    payload = {
+        "project_id": project_id,
+        "pid": os.getpid(),
+        "started_at": utc_now(),
+        "status": "running",
+    }
+    for attempt in range(3):
+        try:
+            descriptor = os.open(
+                str(lock_path),
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            )
+        except FileExistsError:
+            try:
+                owner = read_json(lock_path)
+            except (OSError, json.JSONDecodeError):
+                if attempt < 2:
+                    time.sleep(0.1)
+                    continue
+                raise RuntimeError(
+                    f"Discovery lock is unreadable: {lock_path}. Verify that no "
+                    "discovery process is running before removing the stale lock."
+                )
+            owner_pid = int(owner.get("pid") or 0) if isinstance(owner, dict) else 0
+            if process_is_running(owner_pid):
+                raise RuntimeError(
+                    f"Discovery is already running for {project_id} as PID "
+                    f"{owner_pid}. Monitor that process instead of starting another."
+                )
+            lock_path.unlink(missing_ok=True)
+            continue
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        return lock_path
+    raise RuntimeError(f"Could not acquire discovery lock: {lock_path}")
+
+
+def release_discovery_process_lock(lock_path: Path, pid: int | None = None) -> None:
+    owner_pid = os.getpid() if pid is None else pid
+    try:
+        owner = read_json(lock_path)
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return
+    if isinstance(owner, dict) and int(owner.get("pid") or 0) == owner_pid:
+        lock_path.unlink(missing_ok=True)
+
+
 def split_keywords(raw: str) -> list[str]:
     return dedupe([x.strip() for x in re.split(r"[,;；\n]+", raw or "") if x.strip()])
 
@@ -2490,7 +2588,39 @@ def run(args: argparse.Namespace) -> int:
     )
     project_id = str(project_manifest["project_id"])
     project = review_root / "review-projects" / project_id
+    try:
+        process_lock_path = acquire_discovery_process_lock(project, project_id)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
+
+    def cleanup_discovery_process_lock() -> None:
+        release_discovery_process_lock(process_lock_path)
+
+    atexit.register(cleanup_discovery_process_lock)
     progress(f"starting project {project_id}: {topic}")
+    prior_manifest = read_json(project / "project.json")
+    prior_run_id = str(prior_manifest.get("current_discovery_run_id") or "").strip()
+    prior_runs = [
+        row
+        for row in prior_manifest.get("discovery_runs", [])
+        if isinstance(row, dict)
+    ]
+    prior_record = next(
+        (
+            row
+            for row in prior_runs
+            if str(row.get("discovery_run_id") or "") == prior_run_id
+        ),
+        None,
+    )
+    if prior_run_id and prior_record and prior_record.get("status") == "in_progress":
+        record_discovery_run(
+            project,
+            prior_run_id,
+            str(prior_record.get("topic") or topic),
+            "interrupted",
+        )
+        progress(f"marked prior discovery run interrupted: {prior_run_id}")
     archived_discovery = archive_current_discovery(project)
     out_dir = project / "00_discovery"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -2935,6 +3065,8 @@ def run(args: argparse.Namespace) -> int:
     cleanup_discovery_marker()
     atexit.unregister(cleanup_discovery_marker)
     record_discovery_run(project, discovery_run_id, topic, "completed")
+    cleanup_discovery_process_lock()
+    atexit.unregister(cleanup_discovery_process_lock)
     print(f"Discovery project: {project}")
     if archived_discovery:
         print(f"Previous discovery archived: {archived_discovery}")

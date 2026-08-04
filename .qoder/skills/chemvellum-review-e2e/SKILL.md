@@ -12,8 +12,14 @@ it with a shorter plan and do not stop after writing `manuscript.md`. In
 particular, use the discovery run's `corpus_plan.draft.json` to screen the
 initial literature as a coverage-bearing set before the main ingestion; do not
 let a convenient first batch of papers define the review's scale or scope.
-For a broad topic, follow the canonical Skill's full-length workflow: browse the
-source-figure inventory during reading, treat the first coherent manuscript as
-a synthesis draft, and make one substantive expansion pass before citation
-assembly or export. Do not replace that pass with abstract-only screening,
-post-hoc selection of a predetermined image count, or successful page rendering.
+Run broad discovery once with a long command timeout, normally at least 45 to
+60 minutes when dozens of queries are planned. Monitor its timestamped progress
+instead of terminating it at a short tool timeout or launching a duplicate
+process for the same project.
+Maintain the project's `notes/synthesis_model.md` as the current scientific
+explanation. Let full-text reading revise its important relationships, develop
+the manuscript as its reader-facing expression, and use prose, source visuals,
+original high-level diagrams, and aligned tables as useful views of the same
+model. Let review scale follow explanatory resolution and saturation; do not
+replace that judgment with a nominal expansion pass, abstract-only screening,
+a predetermined image count, or successful page rendering.

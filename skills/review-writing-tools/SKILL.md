@@ -17,14 +17,17 @@ Do not create a manual numbered bibliography from model memory. Do not treat
 the ability to produce fluent prose as evidence that the literature was found,
 opened, or understood.
 
-Write one canonical Markdown manuscript. Keep optional notes and helper outputs
-inside the review project.
+Write one canonical Markdown manuscript. Maintain the project's
+`notes/synthesis_model.md` as the living explanation behind it; keep other
+optional notes and helper outputs inside the review project.
 
 Treat this skill as guidance for judgment, not a form to complete. Do not emit
 planning matrices, paragraph checks, compliance reports, or proof files unless
-the user asks for them. Think continuously while reading and drafting. When a
-consequential claim needs stronger evidence or a different frame, interrupt the
-drafting to retrieve or reassess evidence.
+the user asks for them. The synthesis model is not another deliverable or a
+checklist: revise it only when scientific understanding changes. Think
+continuously while reading and drafting. When a consequential claim needs
+stronger evidence or a different frame, interrupt the drafting to retrieve or
+reassess evidence.
 
 ## Find the intellectual problem
 
@@ -74,21 +77,28 @@ decision metrics and then to scale constraints. Make the transition explicit.
 Each section should inherit a question from the central problem and leave the
 reader with a changed or more qualified answer that the next section uses.
 
-## Develop a broad review in two passes
+## Maintain one explanatory model
 
-Unless the user asks for a focused or mini-review, let a broad topic become a
-full-length review rather than a compact manuscript with comprehensive
-headings. Write one coherent synthesis draft to establish the central judgment
-and explanatory architecture. Then make one substantive expansion pass across
-the manuscript before final citation assembly or export. Reopen sources and the
-retained candidate pool as needed to deepen comparisons, mechanisms,
-representative cases, disagreements, and failure boundaries that the first
-draft compressed.
+Use `notes/synthesis_model.md` to state the best current answer to the reader
+question and the relationships that make that answer true, conditional, or
+uncertain. Relationships may be causal, mechanistic, comparative, temporal,
+scale-dependent, or competing. Attach papers to relationships as evidence; do
+not organize the model as a paper list.
 
-Treat this as a single editorial return to the whole argument, not a repeated
-paragraph check or a completion gate for every section. Expansion must add
-scientific resolution, aligned evidence, or useful visual explanation; it must
-not merely restate the first draft at greater length.
+When full-text evidence establishes, distinguishes, revises, or bounds an
+important relationship, revise the model and let that change propagate into
+the architecture, prose, and visuals. When another paper merely repeats an
+already understood relationship, use the repetition only when its independent
+support, scope, or representativeness matters. Keep high-leverage uncertainties
+visible when resolving them could change the central judgment or an important
+boundary.
+
+Develop the manuscript continuously as a reader-facing expression of this
+model. Give each consequential relationship the resolution needed to explain
+the observation, aligned evidence, chemical reason, limiting condition, and
+implication that actually matter. Compress redundant examples. This makes a
+broad review grow when the scientific explanation is rich while allowing a
+narrow question to remain concise; there is no separate expansion stage.
 
 ## Compare before concluding
 
@@ -161,10 +171,11 @@ feed composition can be more useful than inventing a broad rule.
 ## Make visuals perform synthesis
 
 Build and browse the available source-figure inventory while reading, before
-sustained drafting. Choose figures, Schemes, and tables while reasoning, not
-after the prose is finished or by deciding a count in advance. A visual should
-perform an intellectual operation that prose would make the reader reconstruct,
-such as:
+sustained drafting. Treat prose, figures, Schemes, and tables as alternative
+views of the same synthesis model. Choose the view while reasoning, not after
+the prose is finished or by deciding a count in advance. A visual should perform
+an intellectual operation that prose would make the reader reconstruct, such
+as:
 
 - exposing the review's organizing axis or causal chain;
 - aligning mechanisms, conditions, or outcomes across studies;
@@ -196,15 +207,13 @@ solve.
 
 Let the topic and emerging argument shape the literature set. Use an initial
 reading set to establish vocabulary, main approaches, and a useful provisional
-structure, then let drafting expose targeted search questions. A missing
-historical link, unresolved disagreement, unsupported comparison, or section
-carried mainly by an orientation review justifies further search. Stop expanding
-when new targeted searches mostly repeat approaches and evidence already
-understood.
-
-Roughly 40 genuinely relevant cited sources is a scale cue for a broad,
-comprehensive chemistry review, not an admission rule. A paper belongs because
-it changes or supports the argument. State material coverage limits briefly.
+explanation, then let changes and uncertainties in the synthesis model expose
+targeted search questions. A missing historical link, unresolved disagreement,
+unsupported comparison, or relationship carried mainly by an orientation
+review justifies further search. Let the set settle when new targeted searches
+mostly repeat relationships and evidence already understood. A paper belongs
+because it changes, tests, bounds, or materially supports the explanation.
+State material coverage limits briefly.
 
 ## Available tools
 
@@ -239,12 +248,11 @@ identifies that exact output; the inspector recovers the underlying paper IDs
 from that deterministic projection instead of treating numbered references as
 an empty evidence base.
 
-The default snapshot omits a word target. Add `--include-word-advisory` when the
-user asks for a length reference or after the first mature draft of a broad
-full-length review. Use the evidence-scaled range to notice serious compression,
-not as a target or release gate. If a draft is plainly out of proportion to its
-opened evidence and declared scope, make the substantive expansion pass or
-narrow the scope explicitly. Do not draft toward the exact range.
+The default snapshot omits a word target. Add `--include-word-advisory` only
+when the user explicitly asks for a numerical length reference. The advisory is
+descriptive and must not drive reading, writing, visual selection, maturity, or
+release decisions. Judge scientific scale from the explanatory model and the
+resolution needed to communicate it without losing consequential relationships.
 
 Use tools to locate, copy, number, format, browse, and render material. Keep
 editorial judgment with the writer. When a tool has a defect, record the issue

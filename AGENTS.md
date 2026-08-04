@@ -22,16 +22,20 @@ with inspected DOCX and PDF deliverables.
   `00_discovery/corpus_plan.draft.json` before the main ingestion. Do not let a
   convenient first batch of paper keys define the review. Ingest lawful,
   clearly relevant full text broadly, retain the remaining candidates for gap
-  filling, and decide citations only after reading.
-- Do not silently compress a broad topic into a mini-review. Build the source-
-  figure inventory while reading, treat the first coherent manuscript as a
-  synthesis draft, and make one substantive expansion pass before export.
-  Scale cues are editorial diagnostics, not fixed word, page, figure, or table
-  quotas.
+  filling, and decide citations only after reading. Maintain the project's
+  `notes/synthesis_model.md` as the current explanation: select and reopen
+  sources when they can establish, distinguish, revise, or bound relationships
+  that matter to the reader question.
+- Do not silently compress a broad topic into a mini-review. Develop the
+  manuscript continuously as the reader-facing expression of the synthesis
+  model, and use prose, source visuals, original high-level diagrams, and tables
+  as appropriate views of that same explanation. Let scale follow explanatory
+  resolution and saturation, not fixed word, page, source, figure, or table
+  targets and not a nominal expansion pass.
 - Never report the review as complete unless the project contains registered
   full text used in the manuscript, resolved stable paper-ID citations,
-  argument-bearing visuals or a source-based reason they are unsuitable, the
-  final DOCX and PDF, rendered page images, and recorded inspection of every
+  a synthesis model consistent with the manuscript and its useful visual views,
+  the final DOCX and PDF, rendered page images, and recorded inspection of every
   page. Missing items mean the run is still in progress or blocked.
 - Keep runtime papers, MinerU outputs, projects, and experiments in the
   repository's ignored local data directories. Do not commit, push, delete,

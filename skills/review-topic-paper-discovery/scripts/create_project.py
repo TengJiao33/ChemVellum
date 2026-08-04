@@ -19,6 +19,39 @@ EXPERIMENT_ID_RE = re.compile(r"^EXP-(\d{8})-(\d{3,})-")
 RUN_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,159}$")
 
 
+def synthesis_model_template(topic: str) -> str:
+    """Seed one living explanation shared by reading, writing, and visuals."""
+    return f"""# Synthesis Model
+
+**Review question:** {topic}
+
+## Current explanatory model
+
+<!-- State the best current explanation of the reader question. Revise it when
+full-text evidence changes the explanation, its conditions, or its boundaries. -->
+
+## Relations that organize the review
+
+<!-- Record the causal, conditional, comparative, or competing relationships
+that change the answer. Organize by scientific relationship, not by paper. -->
+
+## Evidence that changed the model
+
+<!-- Note only evidence that materially established, distinguished, revised,
+or bounded the explanation. Repetition need not become another entry. -->
+
+## High-leverage uncertainties
+
+<!-- Keep uncertainties whose resolution could change the central judgment,
+the manuscript architecture, or an important scope boundary. -->
+
+## Useful views
+
+<!-- Note relationships best expressed as prose, a source visual, an original
+high-level diagram, or an aligned comparison table. Do not set a count. -->
+"""
+
+
 def utc_now() -> str:
     return (
         datetime.now(timezone.utc)
@@ -197,6 +230,7 @@ def ensure_review_project(
             "updated_at": utc_now(),
             "paths": {
                 "manuscript": "manuscript.md",
+                "synthesis_model": "notes/synthesis_model.md",
                 "discovery": "00_discovery",
                 "assets": "assets",
                 "deliverables": "deliverables",
@@ -210,6 +244,12 @@ def ensure_review_project(
         manuscript = project / "manuscript.md"
         if not manuscript.exists():
             manuscript.write_text(f"# {manifest['title']}\n", encoding="utf-8")
+        synthesis_model = project / "notes" / "synthesis_model.md"
+        if not synthesis_model.exists():
+            synthesis_model.write_text(
+                synthesis_model_template(str(manifest["topic"])),
+                encoding="utf-8",
+            )
         write_json(manifest_path, manifest)
 
         registry_row = {
@@ -334,6 +374,14 @@ def record_discovery_run(
     manifest = read_json(manifest_path)
     runs = [row for row in manifest.get("discovery_runs", []) if isinstance(row, dict)]
     now = utc_now()
+    if status == "in_progress":
+        for previous in runs:
+            if (
+                str(previous.get("discovery_run_id") or "") != run_id
+                and previous.get("status") == "in_progress"
+            ):
+                previous["status"] = "interrupted"
+                previous["finished_at"] = now
     record = next(
         (row for row in runs if str(row.get("discovery_run_id")) == run_id),
         None,
@@ -346,7 +394,7 @@ def record_discovery_run(
         }
         runs.append(record)
     record["status"] = status
-    if status == "completed":
+    if status in {"completed", "interrupted", "failed"}:
         record["finished_at"] = now
     manifest["current_discovery_run_id"] = run_id
     manifest["discovery_runs"] = runs

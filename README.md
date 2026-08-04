@@ -122,11 +122,12 @@ rendered-page inspection. The scholarly manuscript and deliverables are written
 in English by default even when the request and progress conversation use
 another language; another manuscript language must be requested explicitly.
 For a broad topic, the default product is a full-length review rather than a
-mini-review: source visuals are browsed during reading, the first coherent
-manuscript is treated as a synthesis draft, and one substantive expansion pass
-deepens compressed comparisons, mechanisms, cases, boundaries, and visual
-explanations before export. Evidence-scaled length guidance is diagnostic, not
-a fixed word, page, figure, or table quota.
+mini-review. The project maintains one living synthesis model: full-text
+reading revises its important relationships, the manuscript explains those
+relationships to the reader, and figures, Schemes, and tables provide useful
+alternative views of the same explanation. Scale follows the resolution and
+saturation of that model, not a fixed word, page, source, figure, or table
+target and not a nominal expansion pass.
 The commands below document the same workflow for
 manual recovery or inspection; they are not extra setup that a normal user must
 perform.
@@ -140,7 +141,9 @@ perform.
    ```
 
    The allocator creates `CVR-0001-<topic>`, then increments the numeric prefix
-   from existing local projects. Pass that ID to discovery. Alternatively, omit
+   from existing local projects. It also seeds `notes/synthesis_model.md`, the
+   living scientific explanation shared by reading, writing, and visual
+   reasoning. Pass the project ID to discovery. Alternatively, omit
    `--project-id` when calling `discover.py` and discovery will allocate the
    project itself.
 3. Use `review-topic-paper-discovery` to search broadly. Discovery writes
@@ -167,9 +170,12 @@ perform.
    python skills/review-metadata-prep/scripts/prepare_metadata.py --review-root . --mineru-output mineru-outputs --pdf-root chem_papers --discover-from-pdf-root --append-registry
    ```
 
-7. Maintain the canonical manuscript at
-   `review-projects/<project_id>/manuscript.md`. Let reading and drafting reveal
-   targeted follow-up searches.
+7. Maintain the current explanation at
+   `review-projects/<project_id>/notes/synthesis_model.md` and the canonical
+   reader-facing manuscript at `review-projects/<project_id>/manuscript.md`.
+   Let consequential changes or uncertainties in the explanation reveal
+   targeted follow-up searches; compress evidence that only repeats an already
+   understood relationship.
 8. Resolve stable citations and selected assets before export. The default
    export is the branded two-column `chemvellum_journal` layout. Inspect every
    final PDF page rather than treating successful export as editorial
@@ -177,7 +183,8 @@ perform.
 
 Each Skill contains its own commands and decision boundary. ChemVellum does not
 require a stage machine, evidence matrix, fixed source count, figure quota, or
-paragraph-by-paragraph compliance report.
+paragraph-by-paragraph compliance report. The synthesis model is a revisable
+scientific account, not another approval or completion file.
 
 For an isolated benchmark or QA attempt, allocate a local experiment directory:
 

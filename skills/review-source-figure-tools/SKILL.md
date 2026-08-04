@@ -41,12 +41,15 @@ crops, incomplete panels, tables, or publisher boilerplate. Before insertion,
 open the complete source page and inspect the visual, caption, panel set, credit
 line, and surrounding discussion.
 
-Select visuals while reading and drafting. Ask what the reader should learn
-from the visual, then choose the source asset that directly answers that
-question. Let the visual set grow with the argument rather than deciding its
-size in advance. Prefer a primary source for a specific experiment,
-transformation, or measurement. A review-level figure is appropriate when the
-text itself makes a review-level classification or historical comparison.
+Select visuals while reading and drafting. Treat prose, source visuals,
+original high-level diagrams, and aligned tables as different views of the
+project's living synthesis model. Ask which relationship the reader should see
+and whether a visual exposes it more faithfully or efficiently than prose, then
+choose the source asset that directly answers that question. Let the visual set
+grow with the explanation rather than deciding its size in advance. Prefer a
+primary source for a specific experiment, transformation, or measurement. A
+review-level figure is appropriate when the text itself makes a review-level
+classification or historical comparison.
 
 For each chosen asset, create an `asset_manifest.json` row for deterministic
 insertion. A reused paper asset records:
@@ -62,15 +65,18 @@ insertion. A reused paper asset records:
   "origin": "source_paper",
   "source_paper_id": "P123",
   "source_locator": "Figure 3, page 7",
+  "explanatory_use": "Distinguishes the two kinetic regimes discussed in Section 4",
   "reuse_basis": "CC BY 4.0; figure credit line checked",
   "attribution": "Reproduced from ... under CC BY 4.0 [@P123]."
 }
 ```
 
 Choose assets editorially after checking scientific fit, readability, and
-reuse rights. The inventory and browser only expose candidates and provenance.
-A selected asset should appear where it helps the discussion unless later
-reading shows that it is unsuitable; no separate asset status file is needed.
+reuse rights. `explanatory_use` states the relationship the view communicates;
+it is not a required category or visual quota. The inventory and browser only
+expose candidates and provenance. A selected asset should appear where it helps
+the discussion unless later reading changes the model or shows that it is
+unsuitable; no separate asset status file is needed.
 
 Reaction Schemes use the same insertion path as figures. Prefer the complete,
 focused source region needed by the discussion over an unrelated or unreadable
