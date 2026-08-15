@@ -1,8 +1,7 @@
-<p align="center">
-  <img src="docs/assets/readme/chemvellum-logo.svg" alt="ChemVellum logo" width="148">
-</p>
-
-<h1 align="center">ChemVellum</h1>
+<h1 align="center">
+  <img src="docs/assets/readme/chemvellum-logo.svg" alt="ChemVellum logo" width="72" align="middle">
+  ChemVellum
+</h1>
 
 <p align="center">
   <strong>Evidence-led chemistry reviews, from a topic to inspected DOCX and PDF.</strong>
@@ -11,12 +10,8 @@
 <p align="center">
   <a href="https://github.com/TengJiao33/ChemVellum/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/TengJiao33/ChemVellum/actions/workflows/tests.yml/badge.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white">
-  <img alt="8 Skills" src="https://img.shields.io/badge/Skills-8-222222">
-  <img alt="78 tests" src="https://img.shields.io/badge/tests-78-222222">
-</p>
-
-<p align="center">
-  <img src="docs/assets/readme/chemvellum-demo.gif" alt="Twenty-second ChemVellum end-to-end review demo" width="720">
+  <img alt="Full-text evidence" src="https://img.shields.io/badge/evidence-full--text-147B77">
+  <img alt="DOCX and PDF delivery" src="https://img.shields.io/badge/delivery-DOCX%20%2B%20PDF-147B77">
 </p>
 
 ChemVellum turns a chemistry question into a review grounded in registered full
@@ -24,6 +19,10 @@ text. It plans a coverage-driven corpus, reads and compares the evidence,
 maintains a living scientific explanation, resolves stable citations, prepares
 useful figures and tables, exports DOCX and PDF, and inspects every rendered
 page before delivery.
+
+<p align="center">
+  <img src="docs/assets/readme/chemvellum-demo.gif" alt="Twenty-second ChemVellum end-to-end review demo" width="720">
+</p>
 
 The repository packages the workflow as **8 agent Skills**, supported by **20
 deterministic Python scripts** for retrieval, storage, parsing, provenance,
