@@ -141,14 +141,17 @@ Click any page to inspect it at full resolution.
       <sub><strong>Aligned evidence tables.</strong> Comparable conditions and outcomes are normalized for direct reading. CVR-0007, page 14.</sub>
     </td>
   </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="docs/assets/readme/review-energy-landscape.png"><img src="docs/assets/readme/review-energy-landscape.png" alt="DFT energy landscape and mechanistic discussion in CVR-0006" width="100%"></a><br>
+      <sub><strong>Mechanistic energy landscape.</strong> DFT exchange pathways are interpreted alongside characterization choices and application constraints. CVR-0006, page 11.</sub>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/assets/readme/review-references.png"><img src="docs/assets/readme/review-references.png" alt="Resolved references page from CVR-0007" width="100%"></a><br>
+      <sub><strong>Resolved references.</strong> Stable paper-ID citations rendered as a complete bibliography. CVR-0007, page 18.</sub>
+    </td>
+  </tr>
 </table>
-
-<p align="center">
-  <a href="docs/assets/readme/review-references.png">
-    <img src="docs/assets/readme/review-references.png" alt="Resolved references page from CVR-0007" width="58%">
-  </a><br>
-  <sub><strong>Resolved references.</strong> Stable paper-ID citations rendered as a complete bibliography. CVR-0007, page 18.</sub>
-</p>
 
 Source figures shown in this gallery have reuse rights recorded in their
 project asset manifests. Original diagrams, tables, and page composition are
