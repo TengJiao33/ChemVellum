@@ -1,4 +1,8 @@
-# ChemVellum
+<p align="center">
+  <img src="docs/assets/readme/chemvellum-logo.svg" alt="ChemVellum logo" width="148">
+</p>
+
+<h1 align="center">ChemVellum</h1>
 
 <p align="center">
   <strong>Evidence-led chemistry reviews, from a topic to inspected DOCX and PDF.</strong>

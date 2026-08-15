@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">ChemVellum logo</title>
+  <desc id="desc">A hexagonal C joined with a folded V, representing chemistry and scientific writing.</desc>
+  <g fill="none" stroke="#147b77" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M352 112 276 68 128 154v204l148 86 76-44"/>
+    <path d="m314 164 66 184 66-184"/>
+  </g>
+</svg>
