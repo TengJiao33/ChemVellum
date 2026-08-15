@@ -1,9 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
   <title id="title">ChemVellum logo</title>
-  <desc id="desc">A softly folded document containing an open hexagonal chemical ring.</desc>
-  <g fill="none" stroke="#147b77" stroke-width="32" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M160 72h146l94 94v216c0 32-26 58-58 58H160c-27 0-48-21-48-48V120c0-27 21-48 48-48Z"/>
-    <path d="M306 72v94h94"/>
-    <path d="m320 230-44-25-84 48v102l84 48 44-25"/>
+  <desc id="desc">A widened hexagonal C joined with a folded V, representing chemistry and scientific writing.</desc>
+  <g fill="none" stroke="#147b77" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M358 112 275 68 117 154v204l158 86 83-44"/>
+    <path d="m316 164 71 184 69-184"/>
   </g>
 </svg>
