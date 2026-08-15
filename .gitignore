@@ -10,6 +10,12 @@
 !/requirements.txt
 !/LICENSE*
 !/NOTICE*
+!/docs/
+/docs/*
+!/docs/assets/
+/docs/assets/*
+!/docs/assets/readme/
+!/docs/assets/readme/**
 !/skills/
 !/skills/**
 !/view/
